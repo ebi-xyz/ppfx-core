@@ -91,7 +91,7 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         uint256 total = size + fee;
-        require(fundingBalance[user] >= total, "Insufficient funding balance to add order");
+        require(fundingBalance[user] >= total, "Insufficient funding balance to add position");
         fundingBalance[user] -= total;
         tradingBalance[user][market] += total;
         emit PositionAdded(user, marketName, size, fee);
@@ -101,7 +101,7 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         uint256 total = size + fee;
-        require(tradingBalance[user][market] >= total, "Insufficient trading balance to cancel order");
+        require(tradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
         tradingBalance[user][market] -= total;
         fundingBalance[user] += size;
         usdt.safeTransfer(treasury, fee);
@@ -122,7 +122,7 @@ contract PPFX is IPPFX, Context {
     function fillOrder(address user, string memory marketName, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(tradingBalance[user][market] >= fee, "Insufficient funding balance to pay order filling fee");
+        require(tradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
         tradingBalance[user][market] -= fee;
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
@@ -138,17 +138,13 @@ contract PPFX is IPPFX, Context {
         emit OrderCancelled(user, marketName, size, fee);
     }
 
-    function addFunding(address user, uint256 amount) external onlyOperator {
-        fundingBalance[user] += amount;
-        emit FundingAdded(user, amount);
-    }
-
-    function deductFunding(address user, string memory marketName, uint256 amount) external onlyOperator {
+    function settleFundingFee(address user, string memory marketName, uint256 amount) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(tradingBalance[user][market] >= amount, "Insufficient trading balance to deduct funding");
+        require(tradingBalance[user][market] >= amount, "Insufficient trading balance to settle funding");
         tradingBalance[user][market] -= amount;
-        emit FundingDeducted(user, marketName,  amount);
+        fundingBalance[user] += amount;
+        emit FundingSettled(user, marketName, amount);
     }
 
     function liquidate(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {

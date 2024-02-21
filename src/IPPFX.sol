@@ -19,8 +19,7 @@ interface IPPFX {
     event PositionClosed(address indexed user, string market, uint256 size, uint256 fee);
     event OrderFilled(address indexed user, string market, uint256 fee);
     event OrderCancelled(address indexed user, string market, uint256 size, uint256 fee);
-    event FundingAdded(address indexed user, uint256 amount);
-    event FundingDeducted(address indexed user, string market, uint256 amount);
+    event FundingSettled(address indexed user, string market, uint256 amount);
     event CollateralAdded(address indexed user, string market, uint256 amount);
     event CollateralDeducted(address indexed user, string market, uint256 amount);
     event Liquidated(address indexed user, string market, uint256 amount, uint256 fee);
