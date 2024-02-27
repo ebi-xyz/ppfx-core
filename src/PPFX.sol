@@ -29,16 +29,25 @@ contract PPFX is IPPFX, Context {
     mapping(bytes32 => bool) marketExists;
     bytes32[] public availableMarkets;
 
+    /**
+     * @dev Throws if called by any accoutn other than the Admin
+     */
     modifier onlyAdmin {
         require(_msgSender() == admin, "Caller not admin");
         _;
     }
 
+    /**
+     * @dev Throws if called by any accoutn other than the Operator
+     */
     modifier onlyOperator {
         require(_msgSender() == operator, "Caller not operator");
         _;
     }
 
+    /**
+     * @dev Initializes the contract with the info provided by the developer as the initial operator.
+     */
     constructor(address _admin, address _treasury, address _insurance, IERC20 usdtAddress, uint256 _withdrawalWaitTime) {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
@@ -48,18 +57,33 @@ contract PPFX is IPPFX, Context {
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
     }
 
+    /**
+     * @dev Get total trading balance across all available markets.
+     */
     function getTradingBalance() external view returns (uint256) {
         return _tradingBalance(_msgSender());
     }
 
+    /**
+     * @dev Get total balance across trading and funding balance.
+     */
     function totalBalance() external view returns (uint256) {
         return fundingBalance[_msgSender()] + _tradingBalance(_msgSender());
     }
 
+    /**
+     * @dev Get total number of available markets.
+     */
     function totalMarkets() external view returns (uint256) {
         return availableMarkets.length;
     }
 
+    /**
+     * @dev Initiate a deposit.
+     * @param amount The amount of USDT to deposit
+     * 
+     * Emits a {UserDeposit} event.
+     */
     function deposit(uint256 amount) external {
         require(amount > 0, "Invalid amount");
         require(usdt.allowance(_msgSender(), address(this)) >= amount, "Insufficient allowance");
@@ -68,6 +92,13 @@ contract PPFX is IPPFX, Context {
         emit UserDeposit(_msgSender(), amount);
     }
 
+    /**
+     * @dev Initiate a withdrawal.
+     * @param amount The amount of USDT to withdraw
+     *
+     * Emits a {UserWithdrawal} event.
+     *
+     */
     function withdraw(uint256 amount) external {
         require(amount > 0, "Invalid amount");
         require(fundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
@@ -77,6 +108,13 @@ contract PPFX is IPPFX, Context {
         emit UserWithdrawal(_msgSender(), amount, block.number + withdrawalWaitTime);
     }
 
+    /**
+     * @dev Claim all pending withdrawal
+     * Throw if no available pending withdrawal.
+     *
+     * Emits a {UserClaimedWithdrawal} event.
+     *
+     */
     function claimPendingWithdrawal() external {
         require(pendingWithdrawalBalance[_msgSender()] > 0, "Insufficient pending withdrawal balance");
         require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
@@ -87,6 +125,23 @@ contract PPFX is IPPFX, Context {
         emit UserClaimedWithdrawal(_msgSender(), withdrew, block.number);
     }
 
+    /****************************
+     * Operators only functions *
+     ****************************/
+
+    /**
+     * @dev Add Position in the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param size Size in USDT of the position.
+     * @param fee USDT Fee for adding position.
+     *
+     * Emits a {PositionAdded} event, transfer `size` and `fee` from funding to trading balance.
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` funding balance must have at least `size` + `fee`.
+     */
     function addPosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -97,6 +152,20 @@ contract PPFX is IPPFX, Context {
         emit PositionAdded(user, marketName, size, fee);
     }
 
+    /**
+     * @dev Reduce Position in the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param size Size in USDT of the position.
+     * @param fee USDT Fee for reducing position.
+     *
+     * Emits a {PositionReduced} event, transfer `size` from trading to funding balance,
+     * transfer `fee` from contract to treasury account. 
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `size` + `fee`.
+     */
     function reducePosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -108,6 +177,21 @@ contract PPFX is IPPFX, Context {
         emit PositionReduced(user, marketName, size, fee);
     }
 
+    /**
+     * @dev Close Position in the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param size Size in USDT of the remaining position.
+     * @param fee USDT Fee for closing position.
+     *
+     * Emits a {PositionClosed} event, trading balance of `marketName` set to 0,
+     * transfer `size` to funding balance,
+     * transfer `fee` from contract to treasury account. 
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `size` + `fee`.
+     */
     function closePosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -119,6 +203,19 @@ contract PPFX is IPPFX, Context {
         emit PositionClosed(user, marketName, size, fee);
     }
 
+    /**
+     * @dev Fill order in the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param fee USDT Fee for filling order.
+     *
+     * Emits a {OrderFilled} event, deduct `fee` from trading balance,
+     * transfer `fee` from contract to treasury account. 
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `size` + `fee`.
+     */
     function fillOrder(address user, string memory marketName, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -128,6 +225,19 @@ contract PPFX is IPPFX, Context {
         emit OrderFilled(user, marketName, fee);
     }
 
+    /**
+     * @dev Cancel order in the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param size Size in USDT of the order.
+     * @param fee USDT Fee for cancelling order.
+     *
+     * Emits a {OrderCancelled} event, transfer `size` + `fee` from trading to funding balance,
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `size` + `fee`.
+     */
     function cancelOrder(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -138,6 +248,18 @@ contract PPFX is IPPFX, Context {
         emit OrderCancelled(user, marketName, size, fee);
     }
 
+    /**
+     * @dev Settle given market funding fee for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param amount USDT amount of the funding fee.
+     *
+     * Emits a {FundingSettled} event, transfer `amount` from trading to funding balance,
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `amount`.
+     */
     function settleFundingFee(address user, string memory marketName, uint256 amount) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -147,6 +269,21 @@ contract PPFX is IPPFX, Context {
         emit FundingSettled(user, marketName, amount);
     }
 
+    /**
+     * @dev Liquidate the given market of the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param amount USDT amount of the remaining position.
+     * @param fee USDT fee for liquidating.
+     *
+     * Emits a {Liquidated} event, set trading balance of `marketName` to 0,
+     * transfer the remaining `amount` to funding balance,
+     * transfer `fee` to insurance account.
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `amount` + `fee`.
+     */
     function liquidate(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -158,6 +295,18 @@ contract PPFX is IPPFX, Context {
         emit Liquidated(user, marketName, amount, fee);
     }
 
+    /**
+     * @dev Add collateral to the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param amount USDT amount of the collateral to be added.
+     *
+     * Emits a {CollateralAdded} event, transfer `amount` from funding to trading balance.
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` funding balance must have at least `amount`.
+     */
     function addCollateral(address user, string memory marketName, uint256 amount) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -167,6 +316,18 @@ contract PPFX is IPPFX, Context {
         emit CollateralAdded(user, marketName, amount);
     }
 
+    /**
+     * @dev Reduce collateral to the given market for the given user.
+     * @param user The target user account.
+     * @param marketName The target market name.
+     * @param amount USDT amount of the collateral to be reduced.
+     *
+     * Emits a {CollateralDeducted} event, transfer `amount` from trading to funding balance.
+     *
+     * Requirements:
+     * - `marketName` must exists
+     * - `user` trading balance must have at least `amount`.
+     */
     function reduceCollateral(address user, string memory marketName, uint256 amount) external onlyOperator {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
@@ -176,32 +337,100 @@ contract PPFX is IPPFX, Context {
         emit CollateralDeducted(user, marketName, amount);
     }
 
-
+    /**
+     * @dev Add new market
+     * @param marketName The new market name.
+     *
+     * Emits a {NewMarketAdded} event.
+     *
+     * Requirements:
+     * - `marketName` must not exists exists in the available markets.
+     */
     function addMarket(string memory marketName) external onlyOperator() {
         _addMarket(marketName);
     }
 
+    /****************************
+     * Admin only functions *
+     ****************************/
+
+    /**
+     * @dev Update Treasury account.
+     * @param treasuryAddr The new treasury address.
+     *
+     * Emits a {NewTreasury} event.
+     *
+     * Requirements:
+     * - `treasuryAddr` cannot be the zero address.
+     */
     function updateTreasury(address treasuryAddr) external onlyAdmin {
+        require(treasuryAddr != address(0), "Treasury address can not be zero");
         _updateTreasury(treasuryAddr);
     }
 
+    /**
+     * @dev Update Operator account.
+     * @param operatorAddr The new treasury address.
+     *
+     * Emits a {NewOperator} event.
+     *
+     * Requirements:
+     * - `operatorAddr` cannot be the zero address.
+     */
     function updateOperator(address operatorAddr) external onlyAdmin {
+        require(operatorAddr != address(0), "Operator address can not be zero");
         _updateOperator(operatorAddr);
     }
 
+    /**
+     * @dev Update Insurance account.
+     * @param insuranceAddr The new insurance address.
+     *
+     * Emits a {NewInsurance} event.
+     *
+     * Requirements:
+     * - `insuranceAddr` cannot be the zero address.
+     */
     function updateInsurance(address insuranceAddr) external onlyAdmin {
+        require(insuranceAddr != address(0), "Insurance address can not be zero");
         _updateInsurance(insuranceAddr);
     }
 
+    /**
+     * @dev Update USDT token address.
+     * @param newUSDT The new USDT address.
+     *
+     * Emits a {NewUSDT} event.
+     *
+     * Requirements:
+     * - `newUSDT` cannot be the zero address.
+     */
     function updateUsdt(address newUSDT) external onlyAdmin {
+        require(address(newUSDT) != address(0), "USDT address can not be zero");
         _updateUsdt(IERC20(newUSDT));
     }
 
+    /**
+     * @dev Update withdrawal wait time.
+     * @param newBlockTime The new withdrawal wait time.
+     *
+     * Emits a {NewWithdrawalWaitTime} event.
+     *
+     * Requirements:
+     * - `newBlockTime` cannot be zero.
+     */
     function updateWithdrawalWaitTime(uint256 newBlockTime) external onlyAdmin {
         require(newBlockTime > 0, "Invalid new block time");
         _updateWithdrawalWaitTime(newBlockTime);
     }
 
+    /****************************
+     * Internal functions *
+     ****************************/
+
+    function _marketHash(string memory marketName) internal pure returns (bytes32) {
+        return keccak256(abi.encode(marketName));
+    }
 
     function _tradingBalance(address user) internal view returns (uint256) {
         uint256 balSum = 0;
@@ -211,18 +440,16 @@ contract PPFX is IPPFX, Context {
         return balSum;
     }
 
-    function _marketHash(string memory marketName) internal pure returns (bytes32) {
-        return keccak256(abi.encode(marketName));
-    }
-
     function _addMarket(string memory marketName) internal {
         bytes32 market = _marketHash(marketName);
+        require(!marketExists[market], "Market already exists");
         availableMarkets.push(market);
         marketExists[market] = true;
         emit NewMarketAdded(market, marketName);
     }
 
     function _updateAdmin(address adminAddr) internal {
+        require(adminAddr != address(0), "Admin address can not be zero");
         admin = adminAddr;
         emit NewAdmin(adminAddr);
     }
