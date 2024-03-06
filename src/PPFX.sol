@@ -9,6 +9,19 @@ import {IPPFX} from "./IPPFX.sol";
 
 contract PPFX is IPPFX, Context {
 
+    bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
+    bytes4 constant public REDUCE_POSITION_SELECTOR = 0x0e23f3d1; // bytes4(keccak256("reducePosition(address,string,uint256,uint256)"))
+    bytes4 constant public CLOSE_POSITION_SELECTOR = 0x29228a43; // bytes4(keccak256("closePosition(address,string,uint256,uint256)"))
+    bytes4 constant public CANCEL_ORDER_SELECTOR = 0x17a0b3e0; // bytes4(keccak256("cancelOrder(address,string,uint256,uint256)"))
+    bytes4 constant public LIQUIDATE_SELECTOR = 0xdd5273dc; // bytes4(keccak256("liquidate(address,string,uint256,uint256)"))
+
+    bytes4 constant public FILL_ORDER_SELECTOR = 0x21c5aa45; // bytes4(keccak256("fillOrder(address,string,uint256)"))
+    bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x394d3159; // bytes4(keccak256("settleFundingFee(address,string,uint256)"))
+    bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
+    bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
+
+    error FunctionSelectorNotFound(bytes4 methodID);
+
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -143,13 +156,7 @@ contract PPFX is IPPFX, Context {
      * - `user` funding balance must have at least `size` + `fee`.
      */
     function addPosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
-        require(fundingBalance[user] >= total, "Insufficient funding balance to add position");
-        fundingBalance[user] -= total;
-        tradingBalance[user][market] += total;
-        emit PositionAdded(user, marketName, size, fee);
+        _addPosition(user, marketName, size, fee);
     }
 
     /**
@@ -167,14 +174,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `size` + `fee`.
      */
     function reducePosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
-        require(tradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
-        tradingBalance[user][market] -= total;
-        fundingBalance[user] += size;
-        usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, size, fee);
+        _reducePosition(user, marketName, size, fee);
     }
 
     /**
@@ -193,14 +193,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `size` + `fee`.
      */
     function closePosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
-        require(tradingBalance[user][market] >= total, "Insufficient trading balance to close position");
-        tradingBalance[user][market] = 0;
-        fundingBalance[user] += size;
-        usdt.safeTransfer(treasury, fee);
-        emit PositionClosed(user, marketName, size, fee);
+        _closePosition(user, marketName, size, fee);
     }
 
     /**
@@ -217,12 +210,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `size` + `fee`.
      */
     function fillOrder(address user, string memory marketName, uint256 fee) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        require(tradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
-        tradingBalance[user][market] -= fee;
-        usdt.safeTransfer(treasury, fee);
-        emit OrderFilled(user, marketName, fee);
+        _fillOrder(user, marketName, fee);
     }
 
     /**
@@ -239,13 +227,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `size` + `fee`.
      */
     function cancelOrder(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
-        require(tradingBalance[user][market] >= total, "Insufficient trading balance to cancel order");
-        tradingBalance[user][market] -= total;
-        fundingBalance[user] += total;
-        emit OrderCancelled(user, marketName, size, fee);
+        _cancelOrder(user, marketName, size, fee);
     }
 
     /**
@@ -261,12 +243,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `amount`.
      */
     function settleFundingFee(address user, string memory marketName, uint256 amount) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        require(tradingBalance[user][market] >= amount, "Insufficient trading balance to settle funding");
-        tradingBalance[user][market] -= amount;
-        fundingBalance[user] += amount;
-        emit FundingSettled(user, marketName, amount);
+        _settleFundingFee(user, marketName, amount);
     }
 
     /**
@@ -285,14 +262,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `amount` + `fee`.
      */
     function liquidate(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        uint256 total = amount + fee;
-        require(tradingBalance[user][market] >= total, "Insufficient trading balance to liquidate");
-        tradingBalance[user][market] = 0;
-        fundingBalance[user] += amount;
-        usdt.safeTransfer(insurance, fee);
-        emit Liquidated(user, marketName, amount, fee);
+        _liquidate(user, marketName, amount, fee);
     }
 
     /**
@@ -308,12 +278,7 @@ contract PPFX is IPPFX, Context {
      * - `user` funding balance must have at least `amount`.
      */
     function addCollateral(address user, string memory marketName, uint256 amount) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        require(fundingBalance[user] >= amount, "Insufficient funding balance to add collateral");
-        fundingBalance[user] -= amount;
-        tradingBalance[user][market] += amount;
-        emit CollateralAdded(user, marketName, amount);
+        _addCollateral(user, marketName, amount);
     }
 
     /**
@@ -329,12 +294,7 @@ contract PPFX is IPPFX, Context {
      * - `user` trading balance must have at least `amount`.
      */
     function reduceCollateral(address user, string memory marketName, uint256 amount) external onlyOperator {
-        bytes32 market = _marketHash(marketName);
-        require(marketExists[market], "Provided market does not exists");
-        require(tradingBalance[user][market] >= amount, "Insufficient trading balance to reduce collateral");
-        tradingBalance[user][market] -= amount;
-        fundingBalance[user] += amount;
-        emit CollateralDeducted(user, marketName, amount);
+        _reduceCollateral(user, marketName, amount);
     }
 
     /**
@@ -348,6 +308,63 @@ contract PPFX is IPPFX, Context {
      */
     function addMarket(string memory marketName) external onlyOperator() {
         _addMarket(marketName);
+    }
+
+    
+    /**
+     * @dev Bulk Process multiple function calls that with fee parameters, 
+     * addPosition, reducePosition, closePosition, cancelOrder and liquidate
+     *
+     * @param bulkStructs List of BulkStruct to execute
+     *
+     */
+    function bulkProcessFunctionsWithFee(
+        BulkStruct[] memory bulkStructs
+    ) external onlyOperator {
+        for (uint256 i = 0; i < bulkStructs.length; i++) {
+            if (bulkStructs[i].methodID == ADD_POSITION_SELECTOR) {
+                _addPosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+            } else if (bulkStructs[i].methodID == REDUCE_POSITION_SELECTOR) {
+                _reducePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+            } else if (bulkStructs[i].methodID == CLOSE_POSITION_SELECTOR) {
+                _closePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+            } else if (bulkStructs[i].methodID == CANCEL_ORDER_SELECTOR) {
+                _cancelOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+            } else if (bulkStructs[i].methodID == LIQUIDATE_SELECTOR) {
+                _liquidate(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+            } else {
+                revert FunctionSelectorNotFound({
+                    methodID: bulkStructs[i].methodID
+                });
+            }
+        }
+    }
+
+    /**
+     * @dev Bulk Process multiple function calls that without fee parameters, 
+     * fillOrder, settleFundingFee, addCollateral, reduceCollateral
+     *
+     * @param bulkStructs List of BulkStruct to execute
+     *
+     */
+    function bulkProcessFunctionsWithoutFee(
+        BulkStruct[] memory bulkStructs
+    ) external onlyOperator {
+        for (uint256 i = 0; i < bulkStructs.length; i++) {
+            if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
+                _fillOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+            } else if (bulkStructs[i].methodID == SETTLE_FUNDING_SELECTOR) {
+                _settleFundingFee(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+            } else if (bulkStructs[i].methodID == ADD_COLLATERAL_SELECTOR) {
+                _addCollateral(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+            } else if (bulkStructs[i].methodID == REDUCE_COLLATERAL_SELECTOR) {
+                _reduceCollateral(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+            } else {
+                revert FunctionSelectorNotFound({
+                    methodID: bulkStructs[i].methodID
+                });
+            }
+        }
     }
 
     /****************************
@@ -438,6 +455,93 @@ contract PPFX is IPPFX, Context {
             balSum += tradingBalance[user][availableMarkets[i]];
         }
         return balSum;
+    }
+
+    function _addPosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        uint256 total = size + fee;
+        require(fundingBalance[user] >= total, "Insufficient funding balance to add position");
+        fundingBalance[user] -= total;
+        tradingBalance[user][market] += total;
+        emit PositionAdded(user, marketName, size, fee);
+    }
+
+    function _reducePosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
+        uint256 total = size + fee;
+        bytes32 market = _marketHash(marketName);
+        tradingBalance[user][market] -= total;
+        fundingBalance[user] += size;
+        usdt.safeTransfer(treasury, fee);
+        emit PositionReduced(user, marketName, size, fee);
+    }
+
+    function _closePosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        uint256 total = size + fee;
+        require(tradingBalance[user][market] >= total, "Insufficient trading balance to close position");
+        tradingBalance[user][market] = 0;
+        fundingBalance[user] += size;
+        usdt.safeTransfer(treasury, fee);
+        emit PositionClosed(user, marketName, size, fee);
+    }
+
+    function _cancelOrder(address user, string memory marketName, uint256 size, uint256 fee) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        uint256 total = size + fee;
+        require(tradingBalance[user][market] >= total, "Insufficient trading balance to cancel order");
+        tradingBalance[user][market] -= total;
+        fundingBalance[user] += total;
+        emit OrderCancelled(user, marketName, size, fee);
+    }
+
+    function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        uint256 total = amount + fee;
+        require(tradingBalance[user][market] >= total, "Insufficient trading balance to liquidate");
+        tradingBalance[user][market] = 0;
+        fundingBalance[user] += amount;
+        usdt.safeTransfer(insurance, fee);
+        emit Liquidated(user, marketName, amount, fee);
+    }
+
+    function _fillOrder(address user, string memory marketName, uint256 fee) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        require(tradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
+        tradingBalance[user][market] -= fee;
+        usdt.safeTransfer(treasury, fee);
+        emit OrderFilled(user, marketName, fee);
+    }
+
+    function _settleFundingFee(address user, string memory marketName, uint256 amount) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        require(tradingBalance[user][market] >= amount, "Insufficient trading balance to settle funding");
+        tradingBalance[user][market] -= amount;
+        fundingBalance[user] += amount;
+        emit FundingSettled(user, marketName, amount);
+    }
+
+    function _addCollateral(address user, string memory marketName, uint256 amount) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        require(fundingBalance[user] >= amount, "Insufficient funding balance to add collateral");
+        fundingBalance[user] -= amount;
+        tradingBalance[user][market] += amount;
+        emit CollateralAdded(user, marketName, amount);
+    }
+
+    function _reduceCollateral(address user, string memory marketName, uint256 amount) internal {
+        bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        require(tradingBalance[user][market] >= amount, "Insufficient trading balance to reduce collateral");
+        tradingBalance[user][market] -= amount;
+        fundingBalance[user] += amount;
+        emit CollateralDeducted(user, marketName, amount);
     }
 
     function _addMarket(string memory marketName) internal {
