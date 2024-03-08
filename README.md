@@ -15,13 +15,13 @@ PPFX is built with [Foundry](https://book.getfoundry.sh/).
 $ forge build
 
 # test
-$ forget test
+$ forge test
 
 # lint/formatter
 $ forge fmt
 
 # gas snapshot
-$ forget snapshot
+$ forge snapshot
 
 # deploy
 $ forge script script/PPFX.s.sol:PPFXScript --rpc-url <your_rpc_url> --private-key <your_private_key>
