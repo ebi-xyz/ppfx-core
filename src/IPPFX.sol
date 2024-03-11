@@ -44,7 +44,7 @@ interface IPPFX {
      * @dev Get Sender total trading balance.
      * @return Sum of sender's trading balance across all available markets.
      */
-    function getTradingBalance() external view returns (uint256);
+    function getTradingBalance(address target) external view returns (uint256);
 
     /**
      * @dev Get target address funding balance.
@@ -56,13 +56,18 @@ interface IPPFX {
      * @dev Get Sender total balance.
      * @return Sum of sender's sum of total trading balance and funding balance.
      */
-    function totalBalance() external view returns (uint256);
+    function totalBalance(address target) external view returns (uint256);
 
     /**
      * @dev Get total numbers of available markets.
      * @return The number of available markets.
      */
     function totalMarkets() external view returns (uint256);
+
+    /**
+     * @dev Get all available markets.
+     */
+    function getAllMarkets() external view returns (bytes32[] memory);
 
     /**
      * @dev Initiate a deposit.
