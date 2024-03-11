@@ -73,15 +73,15 @@ contract PPFX is IPPFX, Context {
     /**
      * @dev Get total trading balance across all available markets.
      */
-    function getTradingBalance() external view returns (uint256) {
-        return _tradingBalance(_msgSender());
+    function getTradingBalance(address target) external view returns (uint256) {
+        return _tradingBalance(target);
     }
 
     /**
      * @dev Get total balance across trading and funding balance.
      */
-    function totalBalance() external view returns (uint256) {
-        return fundingBalance[_msgSender()] + _tradingBalance(_msgSender());
+    function totalBalance(address target) external view returns (uint256) {
+        return fundingBalance[target] + _tradingBalance(target);
     }
 
     /**
@@ -89,6 +89,13 @@ contract PPFX is IPPFX, Context {
      */
     function totalMarkets() external view returns (uint256) {
         return availableMarkets.length;
+    }
+
+    /**
+     * @dev Get all available markets.
+     */
+    function getAllMarkets() external view returns (bytes32[] memory) {
+        return availableMarkets;
     }
 
     /**
@@ -306,7 +313,7 @@ contract PPFX is IPPFX, Context {
      * Requirements:
      * - `marketName` must not exists exists in the available markets.
      */
-    function addMarket(string memory marketName) external onlyOperator() {
+    function addMarket(string memory marketName) external onlyAdmin() {
         _addMarket(marketName);
     }
 
