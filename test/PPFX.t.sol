@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
+import {Vault} from "../src/Vault.sol";
 import {PPFX} from "../src/PPFX.sol";
 import {IPPFX} from "../src/IPPFX.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -21,14 +22,22 @@ contract PPFXTest is Test {
 
     function setUp() public {
         usdt = new USDT("USDT", "USDT");
+
+        Vault fundingVault = new Vault(usdt);
+        Vault tradingVault = new Vault(usdt);
         
         ppfx = new PPFX(
             address(this),
             treasury,
             insurance,
             IERC20(address(usdt)),
+            address(fundingVault),
+            address(tradingVault),
             5
         );
+
+        fundingVault.transferOwnership(address(ppfx));
+        tradingVault.transferOwnership(address(ppfx));
     }
 
     function test_SuccessDeposit() public {
