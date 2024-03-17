@@ -67,15 +67,23 @@ contract PPFX is IPPFX, Context {
     /**
      * @dev Initializes the contract with the info provided by the developer as the initial operator.
      */
-    constructor(address _admin, address _treasury, address _insurance, IERC20 usdtAddress, uint256 _withdrawalWaitTime) {
+    constructor(
+        address _admin, 
+        address _treasury, 
+        address _insurance, 
+        IERC20 usdtAddress,
+        address fundingVault,
+        address tradingVault,
+        uint256 _withdrawalWaitTime
+    ) {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
         _updateOperator(_msgSender());
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
-        _updateUserFundingVault();
-        _updateUserTradingVault();
+        _updateUserFundingVault(fundingVault);
+        _updateUserTradingVault(tradingVault);
     }
 
     /**
@@ -636,18 +644,16 @@ contract PPFX is IPPFX, Context {
         emit NewUSDT(address(newUSDT));
     }
 
-    function _updateUserTradingVault() internal {
-        Vault newVault = new Vault(usdt);
-        usersTradingVault = newVault;
-        usdt.forceApprove(address(newVault), MAX_UINT256);
-        emit NewUserTradingVault(address(newVault));
+    function _updateUserTradingVault(address vaultAddr) internal {
+        usersTradingVault = Vault(vaultAddr);
+        usdt.forceApprove(vaultAddr, MAX_UINT256);
+        emit NewUserTradingVault(vaultAddr);
     }
 
-    function _updateUserFundingVault() internal {
-        Vault newVault = new Vault(usdt);
-        usersFundingVault = newVault;
-        usdt.forceApprove(address(newVault), MAX_UINT256);
-        emit NewUserFundingVault(address(newVault));
+    function _updateUserFundingVault(address vaultAddr) internal {
+        usersFundingVault = Vault(vaultAddr);
+        usdt.forceApprove(vaultAddr, MAX_UINT256);
+        emit NewUserTradingVault(vaultAddr);
     }
 
     function _updateWithdrawalWaitTime(uint256 newBlockTime) internal {
