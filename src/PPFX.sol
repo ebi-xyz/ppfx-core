@@ -6,7 +6,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPPFX} from "./IPPFX.sol";
-import {Vault} from "./Vault.sol";
 
 contract PPFX is IPPFX, Context {
 
@@ -37,11 +36,15 @@ contract PPFX is IPPFX, Context {
 
     uint256 public withdrawalWaitTime;
 
-    Vault public usersTradingVault;
-    Vault public usersFundingVault;
-
     uint256 private allUsersLoss;
-    mapping(address => uint256) private usersProfit;
+    uint256 public totalTradingBalance;
+    
+    mapping(bool => uint256) public totalSideTradingBalance;
+    mapping(address => mapping(bool => uint256)) userSideTotalTradingBalance;
+    mapping(address => mapping(bytes32 => uint256)) public userTradingBalance;
+
+    mapping(address => uint256) public userFundingBalance;
+    mapping(address => uint256) private usersUPnl;
     mapping(address => uint256) public pendingWithdrawalBalance;
     mapping(address => uint256) public lastWithdrawalBlock;
 
@@ -72,8 +75,6 @@ contract PPFX is IPPFX, Context {
         address _treasury, 
         address _insurance, 
         IERC20 usdtAddress,
-        address fundingVault,
-        address tradingVault,
         uint256 _withdrawalWaitTime
     ) {
         _updateAdmin(_admin);
@@ -82,8 +83,6 @@ contract PPFX is IPPFX, Context {
         _updateOperator(_msgSender());
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
-        _updateUserFundingVault(fundingVault);
-        _updateUserTradingVault(tradingVault);
     }
 
     /**
@@ -99,6 +98,14 @@ contract PPFX is IPPFX, Context {
      */
     function getTradingBalance(address target) external view returns (uint256) {
         return _tradingBalance(target);
+    }
+
+    /**
+     * @dev Get trading balance in a single market.
+     */
+    function getTradingBalanceInMarket(address target, string memory marketName) external view returns (uint256) {
+        bytes32 market = _marketHash(marketName);
+        return _tradingBalanceInMarket(target, market);
     }
 
     /**
@@ -132,7 +139,7 @@ contract PPFX is IPPFX, Context {
         require(amount > 0, "Invalid amount");
         require(usdt.allowance(_msgSender(), address(this)) >= amount, "Insufficient allowance");
         usdt.safeTransferFrom(_msgSender(), address(this), amount);
-        usersFundingVault.deposit(_msgSender(), amount);
+        userFundingBalance[_msgSender()] += amount;
         emit UserDeposit(_msgSender(), amount);
     }
 
@@ -146,7 +153,7 @@ contract PPFX is IPPFX, Context {
     function withdraw(uint256 amount) external {
         require(amount > 0, "Invalid amount");
         require(_fundingBalance(_msgSender()) >= amount, "Insufficient balance from funding account");
-        usersFundingVault.withdraw(_msgSender(), amount);
+        userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
         lastWithdrawalBlock[_msgSender()] = block.number;
         emit UserWithdrawal(_msgSender(), amount, block.number + withdrawalWaitTime);
@@ -481,15 +488,23 @@ contract PPFX is IPPFX, Context {
     }
 
     function _tradingBalance(address user) internal view returns (uint256) {
-        return usersTradingVault.getUserTotalBalance(user, availableMarkets);
+        uint256 balSum = 0;
+        for (uint i = 0; i < availableMarkets.length; i++) {
+            balSum += userTradingBalance[user][availableMarkets[i]];
+        }
+        return balSum;
     }
 
     function _tradingBalanceInMarket(address user, bytes32 market) internal view returns (uint256) {
-        return usersTradingVault.getUserBalance(user, market);
+        return userTradingBalance[user][market];
     }
 
     function _fundingBalance(address user) internal view returns (uint256) {
-        return usersFundingVault.getUserBalance(user) + usersProfit[user];
+        return userFundingBalance[user];
+    }
+
+    function _fundingBalanceWithPnl(address user) internal view returns (uint256) {
+        return userFundingBalance[user] + usersUPnl[user];
     }
 
     function _addPosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
@@ -497,16 +512,18 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         uint256 total = size + fee;
         require(_fundingBalance(user) >= total, "Insufficient funding balance to add position");
-        usersFundingVault.withdraw(user, total);
-        usersTradingVault.deposit(user, market, total);
+        userFundingBalance[user] -= total;
+        userTradingBalance[user][market] += total;
+        totalTradingBalance += total;
         emit PositionAdded(user, marketName, size, fee);
     }
 
     function _reducePosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
         uint256 total = size + fee;
         bytes32 market = _marketHash(marketName);
-        usersTradingVault.withdraw(user, market, total);
-        usersFundingVault.deposit(user, size);
+        userTradingBalance[user][market] -= total;
+        totalTradingBalance -= total;
+        userFundingBalance[user] += size;
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, size, fee);
     }
@@ -515,10 +532,11 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         uint256 total = size + fee;
-        require(usdt.balanceOf(address(usersTradingVault)) >= total, "Insufficient trading vault balance to close position");
+        require(totalTradingBalance >= total, "Insufficient trading vault balance to close position");
         uint256 userMarketTotalBal = _tradingBalanceInMarket(user, market);
 
-        usersTradingVault.withdraw(user, market, userMarketTotalBal);
+        userTradingBalance[user][market] -= userMarketTotalBal;
+        totalTradingBalance -= userMarketTotalBal;
 
         usdt.safeTransfer(treasury, fee);
         userMarketTotalBal -= fee;
@@ -529,17 +547,17 @@ contract PPFX is IPPFX, Context {
             uint256 profit = size - userMarketTotalBal;
             // If other users loss can cover the profit
             if (allUsersLoss >= profit) {
-                usersFundingVault.deposit(user, size);
+                userFundingBalance[user] += size;
                 allUsersLoss -= profit;
             } else {
                 // Couldn't cover the profit, how much it can cover ?
                 uint256 maxAmt = profit - allUsersLoss;
-                usersFundingVault.deposit(user, maxAmt + userMarketTotalBal);
+                userFundingBalance[user] += maxAmt + userMarketTotalBal;
                 allUsersLoss = 0;
-                usersProfit[user] += size - maxAmt + userMarketTotalBal;
+                usersUPnl[user] += size - maxAmt + userMarketTotalBal;
             }
         } else { // User losing
-            usersFundingVault.deposit(user, size);
+            userFundingBalance[user] += size;
             allUsersLoss += userMarketTotalBal - size;
         }
 
@@ -551,8 +569,9 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         uint256 total = size + fee;
         require(_tradingBalanceInMarket(user, market) >= total, "Insufficient trading balance to cancel order");
-        usersTradingVault.withdraw(user, market, total);
-        usersFundingVault.deposit(user, total);
+        userTradingBalance[user][market] -= total;
+        totalTradingBalance -= total;
+        userFundingBalance[user] += total;
         emit OrderCancelled(user, marketName, size, fee);
     }
 
@@ -561,15 +580,18 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         uint256 total = amount + fee;
         uint256 userTradingBal = _tradingBalanceInMarket(user, market);
-        require(userTradingBal > total, "Trading balance must be larger than total amount to liquidate");
-        usersTradingVault.withdraw(user, market, userTradingBal);
+        require(userTradingBal >= total, "Trading balance must be larger than total amount to liquidate");
+        userTradingBalance[user][market] = 0;
+        totalTradingBalance -= userTradingBal;
 
-        uint256 loss = userTradingBal - total;
-        allUsersLoss += loss;
+        allUsersLoss += amount;
 
-        if (amount > 0) {
-            usersFundingVault.deposit(user, amount);
+        uint256 remaining = userTradingBal - total;
+
+        if (remaining > 0) {
+            userFundingBalance[user] += remaining;
         }
+
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
     }
@@ -578,7 +600,7 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(_tradingBalanceInMarket(user, market) >= fee, "Insufficient trading balance to pay order filling fee");
-        usersTradingVault.withdraw(user, market, fee);
+        userTradingBalance[user][market] -= fee;
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
     }
@@ -587,8 +609,9 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(_tradingBalanceInMarket(user, market) >= amount, "Insufficient trading balance to settle funding");
-        usersTradingVault.withdraw(user, market, amount);
-        usersFundingVault.deposit(user, amount);
+        userTradingBalance[user][market] -= amount;
+        totalTradingBalance -= amount;
+        userFundingBalance[user] += amount;
         emit FundingSettled(user, marketName, amount);
     }
 
@@ -596,8 +619,9 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(_fundingBalance(user) >= amount, "Insufficient funding balance to add collateral");
-        usersFundingVault.withdraw(user, amount);
-        usersTradingVault.deposit(user, market, amount);
+        userFundingBalance[user] -= amount;
+        userTradingBalance[user][market] += amount;
+        totalTradingBalance += amount;
         emit CollateralAdded(user, marketName, amount);
     }
 
@@ -605,8 +629,9 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(_tradingBalanceInMarket(user, market) >= amount, "Insufficient trading balance to reduce collateral");
-        usersTradingVault.withdraw(user, market, amount);
-        usersFundingVault.deposit(user, amount);
+        userTradingBalance[user][market] -= amount;
+        totalTradingBalance -= amount;
+        userFundingBalance[user] += amount;
         emit CollateralDeducted(user, marketName, amount);
     }
 
@@ -642,18 +667,6 @@ contract PPFX is IPPFX, Context {
     function _updateUsdt(IERC20 newUSDT) internal {
         usdt = newUSDT;
         emit NewUSDT(address(newUSDT));
-    }
-
-    function _updateUserTradingVault(address vaultAddr) internal {
-        usersTradingVault = Vault(vaultAddr);
-        usdt.forceApprove(vaultAddr, MAX_UINT256);
-        emit NewUserTradingVault(vaultAddr);
-    }
-
-    function _updateUserFundingVault(address vaultAddr) internal {
-        usersFundingVault = Vault(vaultAddr);
-        usdt.forceApprove(vaultAddr, MAX_UINT256);
-        emit NewUserTradingVault(vaultAddr);
     }
 
     function _updateWithdrawalWaitTime(uint256 newBlockTime) internal {
