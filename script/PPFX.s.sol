@@ -5,7 +5,6 @@ import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {PPFX} from "../src/PPFX.sol";
-import {Vault} from "../src/Vault.sol";
 
 // https://github.com/matter-labs/local-setup/blob/main/rich-wallets.json
 contract USDT is ERC20 {
@@ -22,21 +21,14 @@ contract PPFXScript is Script {
         vm.startBroadcast(deployerKey);
 
         USDT usdt = new USDT("USDT", "USDT");
-        Vault fundingVault = new Vault(usdt);
-        Vault tradingVault = new Vault(usdt);
-
+        
         PPFX ppfx = new PPFX(
             deployerAddr,
             deployerAddr,
             deployerAddr,
             IERC20(address(usdt)),
-            address(fundingVault),
-            address(tradingVault),
             5
         );
-
-        fundingVault.transferOwnership(address(ppfx));
-        tradingVault.transferOwnership(address(ppfx));
 
         vm.stopBroadcast();
     }
