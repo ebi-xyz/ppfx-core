@@ -41,10 +41,11 @@ contract PPFX is IPPFX, Context {
     
     mapping(bool => uint256) public totalSideTradingBalance;
     mapping(address => mapping(bool => uint256)) userSideTotalTradingBalance;
-    mapping(address => mapping(bytes32 => uint256)) public userTradingBalance;
 
+    mapping(address => mapping(bytes32 => uint256)) public userTradingBalance;
     mapping(address => uint256) public userFundingBalance;
     mapping(address => uint256) private usersUPnl;
+    
     mapping(address => uint256) public pendingWithdrawalBalance;
     mapping(address => uint256) public lastWithdrawalBlock;
 
@@ -507,12 +508,26 @@ contract PPFX is IPPFX, Context {
         return userFundingBalance[user] + usersUPnl[user];
     }
 
+    function _handleDeductFundingBalanceWithUPNL(address user, uint256 amount) internal {
+        uint256 upnl = usersUPnl[user];
+        if (upnl > 0) {
+            if (amount > upnl) {
+                usersUPnl[user] = 0;
+                userFundingBalance[user] -= amount - upnl;
+            } else {
+                usersUPnl[user] -= amount;
+            }
+        } else {
+            userFundingBalance[user] -= amount;
+        }
+    }
+
     function _addPosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         uint256 total = size + fee;
-        require(_fundingBalance(user) >= total, "Insufficient funding balance to add position");
-        userFundingBalance[user] -= total;
+        require(_fundingBalanceWithPnl(user) >= total, "Insufficient funding balance to add position");
+        _handleDeductFundingBalanceWithUPNL(user, total);
         userTradingBalance[user][market] += total;
         totalTradingBalance += total;
         emit PositionAdded(user, marketName, size, fee);
@@ -619,7 +634,7 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(_fundingBalance(user) >= amount, "Insufficient funding balance to add collateral");
-        userFundingBalance[user] -= amount;
+        _handleDeductFundingBalanceWithUPNL(user, amount);
         userTradingBalance[user][market] += amount;
         totalTradingBalance += amount;
         emit CollateralAdded(user, marketName, amount);
