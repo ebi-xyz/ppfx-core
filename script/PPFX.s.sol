@@ -21,8 +21,8 @@ contract PPFXScript is Script {
         vm.startBroadcast(deployerKey);
 
         USDT usdt = new USDT("USDT", "USDT");
-        
-        PPFX ppfx = new PPFX(
+
+        new PPFX(
             deployerAddr,
             deployerAddr,
             deployerAddr,
