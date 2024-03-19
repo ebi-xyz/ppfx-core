@@ -80,7 +80,7 @@ contract PPFXTest is Test {
     function test_SuccessReduceEntirePosition() public {
         test_SuccessAddPosition();
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
-        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1);
+        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 0, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.fundingBalance(address(this)), 1 ether - 1);
@@ -90,7 +90,7 @@ contract PPFXTest is Test {
     function test_SuccessReducePosition() public {
         test_SuccessAddPosition();
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
-        ppfx.reducePosition(address(this), "BTC", 1, 1);
+        ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.fundingBalance(address(this)), 1);
@@ -100,7 +100,7 @@ contract PPFXTest is Test {
     function test_SuccessCloseEntirePosition() public {
         test_SuccessAddPosition();
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
-        ppfx.closePosition(address(this), "BTC", 0, 1);
+        ppfx.closePosition(address(this), "BTC", 1 ether - 1, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.fundingBalance(address(this)), 0);
@@ -110,7 +110,7 @@ contract PPFXTest is Test {
     function test_SuccessClosePosition() public {
         test_SuccessAddPosition();
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
-        ppfx.closePosition(address(this), "BTC", 1 gwei, 1);
+        ppfx.closePosition(address(this), "BTC", 1 ether - 1 - 1 gwei, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.fundingBalance(address(this)), 1 gwei);
@@ -168,7 +168,7 @@ contract PPFXTest is Test {
     function test_SuccessLiquidateEntireBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.liquidate(address(this), "BTC", ppfx.getTradingBalanceInMarket(address(this), "BTC") - 1 gwei, 1 gwei);
+        ppfx.liquidate(address(this), "BTC", ppfx.getTradingBalanceForMarket(address(this), "BTC") - 1 gwei, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
         assertEq(ppfx.totalBalance(address(this)), 0);
@@ -176,7 +176,7 @@ contract PPFXTest is Test {
 
     function test_SuccessLiquidateHalfBalance() public {
         test_SuccessAddPosition();
-        uint256 bal = ppfx.getTradingBalanceInMarket(address(this), "BTC");
+        uint256 bal = ppfx.getTradingBalanceForMarket(address(this), "BTC");
         ppfx.liquidate(address(this), "BTC", bal / 2, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
@@ -211,10 +211,10 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
         for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
         for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
 
         ppfx.bulkProcessFunctionsWithFee(bs);
@@ -228,10 +228,10 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
         for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
         for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
 
         ppfx.bulkProcessFunctionsWithoutFee(bs);
@@ -245,7 +245,7 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](1);
         for (uint256 i = 0; i < 1; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
         ppfx.bulkProcessFunctionsWithFee(bs);
 
@@ -258,7 +258,7 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](1);
         for (uint256 i = 0; i < 1; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
 
         ppfx.bulkProcessFunctionsWithoutFee(bs);
@@ -363,7 +363,7 @@ contract PPFXTest is Test {
     function testFail_ReducePositionInsufficientBalanceForFee() public {
         test_SuccessAddPosition();
 
-        ppfx.reducePosition(address(this), "BTC", 1 ether, 1);
+        ppfx.reducePosition(address(this), "BTC", 1 ether, 0, false, 1);
 
         vm.expectRevert(bytes("Insufficient trading balance to reduce position"));
     }
@@ -371,7 +371,7 @@ contract PPFXTest is Test {
     function testFail_ReducePositionInsufficientBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.reducePosition(address(this), "BTC", 1 ether + 1, 0);
+        ppfx.reducePosition(address(this), "BTC", 1 ether + 1, 0, false, 0);
 
         vm.expectRevert(bytes("Insufficient trading balance to reduce position"));
     }
@@ -379,7 +379,7 @@ contract PPFXTest is Test {
     function testFail_ClosePositionInsufficientBalanceForFee() public {
         test_SuccessAddPosition();
 
-        ppfx.closePosition(address(this), "BTC", 1 ether, 1);
+        ppfx.closePosition(address(this), "BTC", 1 ether, false, 1);
 
         vm.expectRevert(bytes("Insufficient trading balance to close position"));
     }
@@ -387,7 +387,7 @@ contract PPFXTest is Test {
     function testFail_ClosePositionInsufficientBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.closePosition(address(this), "BTC", 1 ether + 1, 0);
+        ppfx.closePosition(address(this), "BTC", 1 ether + 1, false, 0);
 
         vm.expectRevert(bytes("Insufficient trading balance to close position"));
     }
@@ -462,10 +462,10 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
         for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
         for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
 
         ppfx.bulkProcessFunctionsWithFee(bs);
@@ -479,10 +479,10 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
         for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
         for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0);
+            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0);
         }
 
         ppfx.bulkProcessFunctionsWithoutFee(bs);
@@ -532,10 +532,10 @@ contract PPFXTest is Test {
         ppfx.addPosition(address(this), "BTC", 1, 1);
         vm.expectRevert(bytes("Caller not operator"));
 
-        ppfx.reducePosition(address(this), "BTC", 1, 1);
+        ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
         vm.expectRevert(bytes("Caller not operator"));
 
-        ppfx.closePosition(address(this), "BTC", 1, 1);
+        ppfx.closePosition(address(this), "BTC", 1, false, 1);
         vm.expectRevert(bytes("Caller not operator"));
 
         ppfx.fillOrder(address(this), "BTC", 1);
@@ -561,10 +561,10 @@ contract PPFXTest is Test {
         ppfx.addPosition(address(this), "BTC", 1, 1);
         vm.expectRevert(bytes("Provided market does not exists"));
 
-        ppfx.reducePosition(address(this), "BTC", 1, 1);
+        ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
         vm.expectRevert(bytes("Provided market does not exists"));
 
-        ppfx.closePosition(address(this), "BTC", 1, 1);
+        ppfx.closePosition(address(this), "BTC", 1, false, 1);
         vm.expectRevert(bytes("Provided market does not exists"));
 
         ppfx.fillOrder(address(this), "BTC", 1);
