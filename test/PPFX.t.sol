@@ -168,7 +168,7 @@ contract PPFXTest is Test {
     function test_SuccessLiquidateEntireBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.liquidate(address(this), "BTC", ppfx.getTradingBalanceInMarket(address(this), "BTC") - 1 gwei, 1 gwei);
+        ppfx.liquidate(address(this), "BTC", ppfx.getTradingBalanceForMarket(address(this), "BTC") - 1 gwei, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
         assertEq(ppfx.totalBalance(address(this)), 0);
@@ -176,7 +176,7 @@ contract PPFXTest is Test {
 
     function test_SuccessLiquidateHalfBalance() public {
         test_SuccessAddPosition();
-        uint256 bal = ppfx.getTradingBalanceInMarket(address(this), "BTC");
+        uint256 bal = ppfx.getTradingBalanceForMarket(address(this), "BTC");
         ppfx.liquidate(address(this), "BTC", bal / 2, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
