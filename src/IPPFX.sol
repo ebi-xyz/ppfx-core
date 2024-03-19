@@ -40,6 +40,8 @@ interface IPPFX {
         address user;
         string marketName;
         uint256 amount;
+        uint256 uPNL;
+        bool isProfit;
         uint256 fee;
     }
 
