@@ -368,7 +368,7 @@ contract PPFX is IPPFX, Context {
             } else if (bulkStructs[i].methodID == REDUCE_POSITION_SELECTOR) {
                 _reducePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == CLOSE_POSITION_SELECTOR) {
-                _closePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
+                _closePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == CANCEL_ORDER_SELECTOR) {
                 _cancelOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == LIQUIDATE_SELECTOR) {
@@ -560,12 +560,12 @@ contract PPFX is IPPFX, Context {
             // Solvency check
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
-            _deductUserTradingBalance(user, market, total);
+            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
             userFundingBalance[user] += size + uPNL;
         } else {
             require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
 
-            _deductUserTradingBalance(user, market, total);
+            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
             userFundingBalance[user] += size - uPNL;
         }
 
