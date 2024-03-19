@@ -585,7 +585,6 @@ contract PPFX is IPPFX, Context {
         emit OrderCancelled(user, marketName, size, fee);
     }
 
-    // TODO: handle uPNL ? 
     function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
