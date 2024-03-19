@@ -520,11 +520,13 @@ contract PPFX is IPPFX, Context {
     }
 
     function _reducePosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
-        uint256 total = size + fee;
         bytes32 market = _marketHash(marketName);
+        require(marketExists[market], "Provided market does not exists");
+        uint256 total = size + fee;
+        require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
-        userFundingBalance[user] += size;
         _deductUserTradingBalance(user, market, total);
+        userFundingBalance[user] += size;
         
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, size, fee);
