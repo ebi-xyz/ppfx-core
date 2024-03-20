@@ -1,10 +1,14 @@
 # PPFX
 
 This repository contains the core contract for PPFX, a fast and non-custodial perp DEX.
-- All settlment in single currency, e.g. USDT. 
+- All settlement in single currency, e.g. USDT. 
 - Supports isolated margin
 - Users may deposit or withdraw funds at any time. Funds that are not collateralized for positions can be withdrawn via 2-step withdrawal process. 
 - Funding rates are settled every 8 hours. 
+
+## Docs
+
+See [Docs](DOCS.md) for product specs explaining the functions of the contracts.
 
 ## Setup
 
