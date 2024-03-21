@@ -44,7 +44,7 @@ contract PPFX is IPPFX, Context {
     mapping(address => uint256) public pendingWithdrawalBalance;
     mapping(address => uint256) public lastWithdrawalBlock;
 
-    mapping(bytes32 => bool) marketExists;
+    mapping(bytes32 => bool) public marketExists;
     bytes32[] public availableMarkets;
 
     /**
@@ -180,40 +180,40 @@ contract PPFX is IPPFX, Context {
      * @dev Add Position in the given market for the given user.
      * @param user The target user account.
      * @param marketName The target market name.
-     * @param size Size in USDT of the position.
+     * @param amount Amount in USDT of the position.
      * @param fee USDT Fee for adding position.
      *
-     * Emits a {PositionAdded} event, transfer `size` and `fee` from funding to trading balance.
+     * Emits a {PositionAdded} event, transfer `amount` and `fee` from funding to trading balance.
      *
      * Requirements:
      * - `marketName` must exists
-     * - `user` funding balance must have at least `size` + `fee`.
+     * - `user` funding balance must have at least `amount` + `fee`.
      */
-    function addPosition(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
-        _addPosition(user, marketName, size, fee);
+    function addPosition(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
+        _addPosition(user, marketName, amount, fee);
     }
 
     /**
      * @dev Reduce Position in the given market for the given user.
      * @param user The target user account.
      * @param marketName The target market name.
-     * @param size Size in USDT of the position.
+     * @param amount Amount in USDT of the position.
      * @param uPNL Unsettled PnL of user position. 
      * @param isProfit Profit or Loss. 
      * @param fee USDT Fee for reducing position.
      *
-     * Emits a {PositionReduced} event, transfer `size` from trading to funding balance,
+     * Emits a {PositionReduced} event, transfer `amount` from trading to funding balance,
      * transfer `fee` from contract to treasury account.
      * 
      * Unsettled PNL are credited to user if profit, and deducted if loss.
      *
      * Requirements:
      * - `marketName` must exists
-     * - `user` trading balance must have at least `size` + `fee`.
+     * - `user` trading balance must have at least `amount` + `fee`.
      * - if `isProfit` is false, `uPNL` must be less than `user` trading balance. 
      */
-    function reducePosition(address user, string memory marketName, uint256 size, uint256 uPNL, bool isProfit, uint256 fee) external onlyOperator {
-        _reducePosition(user, marketName, size, uPNL, isProfit, fee);
+    function reducePosition(address user, string memory marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) external onlyOperator {
+        _reducePosition(user, marketName, amount, uPNL, isProfit, fee);
     }
 
     /**
@@ -248,7 +248,7 @@ contract PPFX is IPPFX, Context {
      *
      * Requirements:
      * - `marketName` must exists
-     * - `user` trading balance must have at least `size` + `fee`.
+     * - `user` trading balance must have at least `amount` + `fee`.
      */
     function fillOrder(address user, string memory marketName, uint256 fee) external onlyOperator {
         _fillOrder(user, marketName, fee);
@@ -258,17 +258,17 @@ contract PPFX is IPPFX, Context {
      * @dev Cancel order in the given market for the given user.
      * @param user The target user account.
      * @param marketName The target market name.
-     * @param size Size in USDT of the order.
+     * @param amount Amount in USDT of the order.
      * @param fee USDT Fee for cancelling order.
      *
-     * Emits a {OrderCancelled} event, transfer `size` + `fee` from trading to funding balance,
+     * Emits a {OrderCancelled} event, transfer `amount` + `fee` from trading to funding balance,
      *
      * Requirements:
      * - `marketName` must exists
-     * - `user` trading balance must have at least `size` + `fee`.
+     * - `user` trading balance must have at least `amount` + `fee`.
      */
-    function cancelOrder(address user, string memory marketName, uint256 size, uint256 fee) external onlyOperator {
-        _cancelOrder(user, marketName, size, fee);
+    function cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
+        _cancelOrder(user, marketName, amount, fee);
     }
 
     /**
@@ -514,22 +514,22 @@ contract PPFX is IPPFX, Context {
         marketTotalTradingBalance[market] += amount;
     }
 
-    function _addPosition(address user, string memory marketName, uint256 size, uint256 fee) internal {
+    function _addPosition(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
+        uint256 total = amount + fee;
         require(_fundingBalance(user) >= total, "Insufficient funding balance to add position");
 
         userFundingBalance[user] -= total;
         _addUserTradingBalance(user, market, total);
 
-        emit PositionAdded(user, marketName, size, fee);
+        emit PositionAdded(user, marketName, amount, fee);
     }
 
-    function _reducePosition(address user, string memory marketName, uint256 size, uint256 uPNL, bool isProfit, uint256 fee) internal {
+    function _reducePosition(address user, string memory marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
+        uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
         if (isProfit == true) {
@@ -537,16 +537,16 @@ contract PPFX is IPPFX, Context {
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
             _deductUserTradingBalance(user, market, total);
-            userFundingBalance[user] += size + uPNL;
+            userFundingBalance[user] += amount + uPNL;
         } else {
             require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
 
             _deductUserTradingBalance(user, market, total);
-            userFundingBalance[user] += size - uPNL;
+            userFundingBalance[user] += amount - uPNL;
         }
 
         usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, size, fee);
+        emit PositionReduced(user, marketName, amount, fee);
     }
 
     // TODO: refactor to call _reducePosition?
@@ -554,35 +554,35 @@ contract PPFX is IPPFX, Context {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay fee and close position");
-        uint256 size = userTradingBalance[user][market] - fee;
+        uint256 amount = userTradingBalance[user][market] - fee;
 
         if (isProfit == true) {
             // Solvency check
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
             _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += size + uPNL;
+            userFundingBalance[user] += amount + uPNL;
         } else {
             require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
 
             _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += size - uPNL;
+            userFundingBalance[user] += amount - uPNL;
         }
 
         usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, size, fee);
+        emit PositionReduced(user, marketName, amount, fee);
     }
 
-    function _cancelOrder(address user, string memory marketName, uint256 size, uint256 fee) internal {
+    function _cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        uint256 total = size + fee;
+        uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to cancel order");
 
         userFundingBalance[user] += total;
         _deductUserTradingBalance(user, market, total);
         
-        emit OrderCancelled(user, marketName, size, fee);
+        emit OrderCancelled(user, marketName, amount, fee);
     }
 
     function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
