@@ -37,6 +37,8 @@ contract PPFX is IPPFX, Context {
     uint256 public withdrawalWaitTime;
     uint256 public totalTradingBalance;
 
+    uint256 public availableFundingFee;
+
     mapping(bytes32 => uint256) public marketTotalTradingBalance;
     mapping(address => mapping(bytes32 => uint256)) public userTradingBalance;
     mapping(address => uint256) public userFundingBalance;
@@ -276,6 +278,7 @@ contract PPFX is IPPFX, Context {
      * @param user The target user account.
      * @param marketName The target market name.
      * @param amount USDT amount of the funding fee.
+     * @param isAdd Adding / Deducting funding fee.
      *
      * Emits a {FundingSettled} event, transfer `amount` from trading to funding balance,
      *
@@ -283,8 +286,8 @@ contract PPFX is IPPFX, Context {
      * - `marketName` must exists
      * - `user` trading balance must have at least `amount`.
      */
-    function settleFundingFee(address user, string memory marketName, uint256 amount) external onlyOperator {
-        _settleFundingFee(user, marketName, amount);
+    function settleFundingFee(address user, string memory marketName, uint256 amount, bool isAdd) external onlyOperator {
+        _settleFundingFee(user, marketName, amount, isAdd);
     }
 
     /**
@@ -395,7 +398,7 @@ contract PPFX is IPPFX, Context {
             if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
                 _fillOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else if (bulkStructs[i].methodID == SETTLE_FUNDING_SELECTOR) {
-                _settleFundingFee(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+                _settleFundingFee(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
             } else if (bulkStructs[i].methodID == ADD_COLLATERAL_SELECTOR) {
                 _addCollateral(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else if (bulkStructs[i].methodID == REDUCE_COLLATERAL_SELECTOR) {
@@ -610,12 +613,20 @@ contract PPFX is IPPFX, Context {
         emit OrderFilled(user, marketName, fee);
     }
 
-    function _settleFundingFee(address user, string memory marketName, uint256 amount) internal {
+    function _settleFundingFee(address user, string memory marketName, uint256 amount, bool isAdd) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to settle funding");
-        _deductUserTradingBalance(user, market, amount);
-        userFundingBalance[user] += amount;
+
+        if (isAdd) {
+            require(availableFundingFee >= amount, "Insufficient collected funding fee to add funding fee");
+            userFundingBalance[user] += amount;
+            availableFundingFee -= amount;
+        } else {
+            require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to deduct funding fee");
+            _deductUserTradingBalance(user, market, amount);
+            availableFundingFee += amount;
+        }
+        
         emit FundingSettled(user, marketName, amount);
     }
 
