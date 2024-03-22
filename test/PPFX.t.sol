@@ -77,7 +77,22 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
-    function test_SuccessReduceEntirePosition() public {
+    function test_2ndAddrSuccessAddPosition() public {
+        usdt.transfer(address(1), 1 ether);
+
+        vm.startPrank(address(1));
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+
+        if (!ppfx.marketExists(keccak256(abi.encode("BTC")))) {
+            test_AddMarket();
+        }
+        
+        ppfx.addPosition(address(1), "BTC", 1 ether - 1, 1);
+    }
+
+    function test_SuccessReduceEntirePositionNoProfit() public {
         test_SuccessAddPosition();
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
         ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 0, false, 1);
@@ -87,9 +102,99 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 1 ether - 1);
     }
 
-    function test_SuccessReducePosition() public {
+    function test_SuccessReduceEntirePositionWithProfit() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
+        test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
+
+        uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
+
+        // Alice Close Position Entire Position, with 1,000,000,000,000 USDT Profit
+        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1 ether, true, 1);
+
+        assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
+        assertEq(ppfx.fundingBalance(address(this)), 2 ether - 1);
+        assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
+        
+        // Bob Liquidate entire position 
+        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+
+        // Bob should have no balance left
+        assertEq(ppfx.totalBalance(address(1)), 0);
+    }
+
+    function test_SuccessReducePositionOnlyProfit() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
+        test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
+
+        uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
+        // Alice Reduce Position, Getting 1,000,000,000,000 USDT Profit
+        // With no reduce in her position
+        ppfx.reducePosition(address(this), "BTC", 0, 1 ether, true, 1);
+
+        assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
+        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
+
+        // Bob Liquidate entire position 
+        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+
+        // Bob should have no balance left
+        assertEq(ppfx.totalBalance(address(1)), 0);
+    }
+
+    function test_SuccessReduceHalfPositionWithAllProfit() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
+        test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
+
+        uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
+        // Alice Reduce Position, Reducing half of her position,
+        // and getting 1,000,000,000,000 USDT Profit
+        ppfx.reducePosition(address(this), "BTC", 0.5 ether, 1 ether, true, 1);
+
+        assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
+        assertEq(ppfx.fundingBalance(address(this)), 1.5 ether);
+        assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
+
+        // Bob Liquidate entire position 
+        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+
+        // Bob should have no balance left
+        assertEq(ppfx.totalBalance(address(1)), 0);
+    }
+
+    function test_SuccessReduceHalfPositionWithHalfProfit() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
+        test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
+
+        uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
+        // Alice Reduce Position, Reducing half of her position,
+        // and getting 500,000,000,000 USDT Profit
+        ppfx.reducePosition(address(this), "BTC", 0.5 ether, 0.5 ether, true, 1);
+
+        assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
+        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.totalBalance(address(this)), 1.5 ether - 1);
+
+        // Bob lose half of his position
+        ppfx.reducePosition(address(1), "BTC", 0.5 ether, 0.5 ether, false, 0);
+        // Bob should have half of his balance left
+        assertEq(ppfx.totalBalance(address(1)), 0.5 ether);
+    }
+
+    function test_SuccessReduceNoProfitPosition() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
+
+        // Alice Reduce Position, lose fee
         ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
@@ -97,9 +202,14 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 1 ether - 1);
     }
 
-    function test_SuccessCloseEntirePosition() public {
+    function test_SuccessCloseEntirePositionNoProfit() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
+
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
+        // Alice close position with 100% loss
         ppfx.closePosition(address(this), "BTC", 1 ether - 1, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
@@ -107,14 +217,24 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 0);
     }
 
-    function test_SuccessClosePosition() public {
+    function test_SuccessCloseHalfPositionNoProfit() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
+
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
-        ppfx.closePosition(address(this), "BTC", 1 ether - 1 - 1 gwei, false, 1);
+        // Alice close position with 50% loss
+        ppfx.closePosition(address(this), "BTC", 0.5 ether - 1, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 1 gwei);
-        assertEq(ppfx.totalBalance(address(this)), 1 gwei);
+        assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
+
+        // Bob close position with 50% winning
+        ppfx.closePosition(address(1), "BTC", 0.5 ether, true, 0);
+        assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.totalBalance(address(1)), 1.5 ether);
     }
 
     function test_SuccessFillOrder() public {
@@ -371,25 +491,34 @@ contract PPFXTest is Test {
     function testFail_ReducePositionInsufficientBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.reducePosition(address(this), "BTC", 1 ether + 1, 0, false, 0);
+        ppfx.reducePosition(address(this), "BTC", 1 ether, 1000000, false, 0);
 
         vm.expectRevert(bytes("Insufficient trading balance to reduce position"));
     }
 
     function testFail_ClosePositionInsufficientBalanceForFee() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
+        // Bob Short BTC with 1,000,000,000,000 USDT
+        test_2ndAddrSuccessAddPosition(); 
 
-        ppfx.closePosition(address(this), "BTC", 1 ether, false, 1);
+        // Alice close position with 100% profit
+        ppfx.closePosition(address(this), "BTC", 1 ether, true, 0);
+
+        // Bob close position with 100% profit which couldn't happen
+        ppfx.closePosition(address(1), "BTC", 1 ether, true, 0);
 
         vm.expectRevert(bytes("Insufficient trading balance to close position"));
     }
 
-    function testFail_ClosePositionInsufficientBalance() public {
+    function testFail_ClosePositionCauseInsolvency() public {
+        // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
+        
+        // Close position with 1,000,000,000,001 USDT Porfit
+        ppfx.closePosition(address(this), "BTC", 1 ether + 1000000, true, 0);
 
-        ppfx.closePosition(address(this), "BTC", 1 ether + 1, false, 0);
-
-        vm.expectRevert(bytes("Insufficient trading balance to close position"));
+        vm.expectRevert(bytes("uPNL profit will cause market insolvency"));
     }
 
     function testFail_FillOrderInsufficientBalance() public {
