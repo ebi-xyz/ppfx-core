@@ -37,6 +37,8 @@ contract PPFX is IPPFX, Context {
     uint256 public withdrawalWaitTime;
     uint256 public totalTradingBalance;
 
+    uint256 public availableFundingFee;
+
     mapping(bytes32 => uint256) public marketTotalTradingBalance;
     mapping(address => mapping(bytes32 => uint256)) public userTradingBalance;
     mapping(address => uint256) public userFundingBalance;
@@ -44,7 +46,7 @@ contract PPFX is IPPFX, Context {
     mapping(address => uint256) public pendingWithdrawalBalance;
     mapping(address => uint256) public lastWithdrawalBlock;
 
-    mapping(bytes32 => bool) marketExists;
+    mapping(bytes32 => bool) public marketExists;
     bytes32[] public availableMarkets;
 
     /**
@@ -616,10 +618,13 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
 
         if (isAdd) {
+            require(availableFundingFee >= amount, "Insufficient collected funding fee to add funding fee");
             userFundingBalance[user] += amount;
+            availableFundingFee -= amount;
         } else {
             require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to deduct funding fee");
             _deductUserTradingBalance(user, market, amount);
+            availableFundingFee += amount;
         }
         
         emit FundingSettled(user, marketName, amount);
