@@ -20,7 +20,7 @@ contract PPFXScript is Script {
 
         vm.startBroadcast(deployerKey);
 
-        USDT usdt = new USDT("USDT", "USDT");
+        USDT usdt = new USDT("MockUSDT", "MUSDT");
 
         new PPFX(
             deployerAddr,
