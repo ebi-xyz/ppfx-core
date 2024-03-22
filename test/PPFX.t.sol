@@ -159,10 +159,13 @@ contract PPFXTest is Test {
     function test_SuccessAddFunding() public {
         test_SuccessAddPosition();
 
-        ppfx.settleFundingFee(address(this), "BTC", 1 ether, true);
+        // Deduct funding fee
+        ppfx.settleFundingFee(address(this), "BTC", 0.5 ether, false);
+        // Then Add funding fee
+        ppfx.settleFundingFee(address(this), "BTC", 0.5 ether, true);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
-        assertEq(ppfx.totalBalance(address(this)), 2 ether);
+        assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
     function test_SuccessDeductFunding() public {
@@ -425,12 +428,20 @@ contract PPFXTest is Test {
         vm.expectRevert(bytes("Insufficient trading balance to cancel order"));
     }
 
-    function testFail_SettleFundingFeeInsufficientBalance() public {
+    function testFail_SettleFundingFeeInsufficientCollectedFeeToAdd() public {
+        test_SuccessAddPosition();
+
+        ppfx.settleFundingFee(address(this), "BTC", 1 ether, true);
+
+        vm.expectRevert(bytes("Insufficient collected funding fee to add funding fee"));
+    }
+
+    function testFail_SettleFundingFeeInsufficientTradingBalanceToDeduct() public {
         test_SuccessAddPosition();
 
         ppfx.settleFundingFee(address(this), "BTC", 1 ether + 1, false);
 
-        vm.expectRevert(bytes("Insufficient trading balance to settle funding"));
+        vm.expectRevert(bytes("Insufficient trading balance to deduct funding fee"));
     }
 
     function testFail_LiquidateInsufficientBalanceForFee() public {
