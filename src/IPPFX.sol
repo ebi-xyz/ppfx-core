@@ -43,6 +43,7 @@ interface IPPFX {
         uint256 uPNL;
         bool isProfit;
         uint256 fee;
+        bool isAdd;
     }
 
     /**
