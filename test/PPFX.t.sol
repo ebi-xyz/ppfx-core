@@ -68,6 +68,28 @@ contract PPFXTest is Test {
         assertEq(usdt.balanceOf(address(this)), oldBalance + 2 ether);
     }
 
+    function test_SuccessAddOperator() public {
+        assertEq(ppfx.getAllOperators().length, 1);
+        ppfx.addOperator(address(1));
+        assertEq(ppfx.getAllOperators().length, 2);
+    }
+
+    function test_SuccessRemoveOperator() public {
+        assertEq(ppfx.getAllOperators().length, 1);
+        ppfx.addOperator(address(1));
+        assertEq(ppfx.getAllOperators().length, 2);
+        ppfx.removeOperator(address(1));
+        assertEq(ppfx.getAllOperators().length, 1);
+    }
+
+    function test_SuccessRemoveAllOperators() public {
+        assertEq(ppfx.getAllOperators().length, 1);
+        ppfx.addOperator(address(1));
+        assertEq(ppfx.getAllOperators().length, 2);
+        ppfx.removeAllOperator();
+        assertEq(ppfx.getAllOperators().length, 0);
+    }
+
     function test_SuccessAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
@@ -640,12 +662,9 @@ contract PPFXTest is Test {
     }
 
     function testFail_NotAdmin() public {
-        vm.prank(address(0));
+        vm.startPrank(address(0));
 
         ppfx.updateTreasury(address(1));
-        vm.expectRevert(bytes("Caller not admin"));
-
-        ppfx.updateOperator(address(1));
         vm.expectRevert(bytes("Caller not admin"));
 
         ppfx.updateInsurance(address(1));
@@ -656,14 +675,13 @@ contract PPFXTest is Test {
 
         ppfx.updateWithdrawalWaitTime(1);
         vm.expectRevert(bytes("Caller not admin"));
+
+        vm.stopPrank();
     }
 
     function test_AdminFunctions() public {
         ppfx.updateTreasury(address(1));
         assertEq(ppfx.treasury(), address(1));
-
-        ppfx.updateOperator(address(1));
-        assertEq(ppfx.operator(), address(1));
 
         ppfx.updateInsurance(address(2));
         assertEq(ppfx.insurance(), address(2));
@@ -675,8 +693,38 @@ contract PPFXTest is Test {
         assertEq(ppfx.withdrawalWaitTime(), 444);
     }
 
+    function testFail_NotAdminAddOperator() public {
+        vm.startPrank(address(0));
+        ppfx.addOperator(address(1));
+        vm.expectRevert(bytes("Caller not admin"));
+    }
+
+    function testFail_NotAdminRemoveOperator() public {
+        vm.startPrank(address(0));
+        ppfx.removeOperator(address(this));
+        vm.expectRevert(bytes("Caller not admin"));
+    }
+
+    function testFail_NotAdminRemoveAllOperators() public {
+        vm.startPrank(address(0));
+        ppfx.removeAllOperator();
+        vm.expectRevert(bytes("Caller not admin"));
+    }
+
+    function testFail_RemoveNotExistsOperator() public {
+        ppfx.removeOperator(address(3));
+        vm.expectRevert(bytes("Operator does not exists"));
+    }
+
+    function testFail_NoOperatorRemoveAllOperators() public {
+        ppfx.removeAllOperator();
+        assertEq(ppfx.getAllOperators().length, 0);
+        ppfx.removeAllOperator();
+        vm.expectRevert(bytes("No operator found"));
+    }
+
     function testFail_NotOperator() public {
-        vm.prank(address(0));
+        vm.startPrank(address(0));
 
         ppfx.addPosition(address(this), "BTC", 1, 1);
         vm.expectRevert(bytes("Caller not operator"));
@@ -704,6 +752,8 @@ contract PPFXTest is Test {
 
         ppfx.reduceCollateral(address(this), "BTC", 1);
         vm.expectRevert(bytes("Caller not operator"));
+
+        vm.stopPrank();
     }
 
     function testFail_CallWithNotExistsMarket() public {
