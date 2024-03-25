@@ -6,8 +6,10 @@ pragma solidity ^0.8.20;
  * @dev Interface of the PPFX contract
  */
 interface IPPFX {
-    event NewTreasury(address indexed newTreasuryAddress);
     event NewOperator(address indexed newOperatorAddress);
+    event OperatorRemoved(address indexed operatorAddr);
+    
+    event NewTreasury(address indexed newTreasuryAddress);
     event NewAdmin(address indexed newAdminAddress);
     event NewInsurance(address indexed newInsuranceAddress);
     event NewUSDT(address indexed newUSDTAddress);
