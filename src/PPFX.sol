@@ -372,13 +372,12 @@ contract PPFX is IPPFX, Context {
 
     
     /**
-     * @dev Bulk Process multiple function calls that with fee parameters, 
-     * addPosition, reducePosition, closePosition, cancelOrder and liquidate
+     * @dev Bulk Process multiple function calls
      *
      * @param bulkStructs List of BulkStruct to execute
      *
      */
-    function bulkProcessFunctionsWithFee(
+    function bulkProcessFunctions(
         BulkStruct[] memory bulkStructs
     ) external onlyOperator {
         for (uint256 i = 0; i < bulkStructs.length; i++) {
@@ -392,26 +391,7 @@ contract PPFX is IPPFX, Context {
                 _cancelOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == LIQUIDATE_SELECTOR) {
                 _liquidate(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else {
-                revert FunctionSelectorNotFound({
-                    methodID: bulkStructs[i].methodID
-                });
-            }
-        }
-    }
-
-    /**
-     * @dev Bulk Process multiple function calls that without fee parameters, 
-     * fillOrder, settleFundingFee, addCollateral, reduceCollateral
-     *
-     * @param bulkStructs List of BulkStruct to execute
-     *
-     */
-    function bulkProcessFunctionsWithoutFee(
-        BulkStruct[] memory bulkStructs
-    ) external onlyOperator {
-        for (uint256 i = 0; i < bulkStructs.length; i++) {
-            if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
+            } else if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
                 _fillOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else if (bulkStructs[i].methodID == SETTLE_FUNDING_SELECTOR) {
                 _settleFundingFee(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
