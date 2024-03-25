@@ -371,24 +371,7 @@ contract PPFXTest is Test {
             bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
         }
 
-        ppfx.bulkProcessFunctionsWithFee(bs);
-
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 20 gwei);
-    }
-
-    function test_SuccessBulkPositionWithoutFeeUpdates() public {
-        test_SuccessDeposit();
-        test_AddMarket();
-       
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
-        for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-        for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-
-        ppfx.bulkProcessFunctionsWithoutFee(bs);
+        ppfx.bulkProcessFunctions(bs);
 
         assertEq(ppfx.fundingBalance(address(this)), 1 ether - 20 gwei);
     }
@@ -399,23 +382,10 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](1);
         for (uint256 i = 0; i < 1; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-        ppfx.bulkProcessFunctionsWithFee(bs);
-
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 1 gwei);
-    }
-
-    function test_SuccessSingleBulkPositionWithoutFeeUpdates() public {
-        test_SuccessDeposit();
-        test_AddMarket();
-       
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](1);
-        for (uint256 i = 0; i < 1; i++) {
             bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
         }
 
-        ppfx.bulkProcessFunctionsWithoutFee(bs);
+        ppfx.bulkProcessFunctions(bs);
 
         assertEq(ppfx.fundingBalance(address(this)), 1 ether - 1 gwei);
     }
@@ -426,18 +396,7 @@ contract PPFXTest is Test {
        
         IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](0);
 
-        ppfx.bulkProcessFunctionsWithFee(bs);
-
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
-    }
-
-    function test_SuccessEmptyBulkPositionWithoutFeeUpdates() public {
-        test_SuccessDeposit();
-        test_AddMarket();
-       
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](0);
-
-        ppfx.bulkProcessFunctionsWithoutFee(bs);
+        ppfx.bulkProcessFunctions(bs);
 
         assertEq(ppfx.fundingBalance(address(this)), 1 ether);
     }
@@ -639,24 +598,7 @@ contract PPFXTest is Test {
             bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
         }
 
-        ppfx.bulkProcessFunctionsWithFee(bs);
-
-        vm.expectRevert(bytes("FunctionSelectorNotFound"));
-    }
-
-    function testFail_BulkUpdatesWithoutFeeSelectorNotFound() public {
-        test_SuccessDeposit();
-        test_AddMarket();
-       
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
-        for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-        for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-
-        ppfx.bulkProcessFunctionsWithoutFee(bs);
+        ppfx.bulkProcessFunctions(bs);
 
         vm.expectRevert(bytes("FunctionSelectorNotFound"));
     }
