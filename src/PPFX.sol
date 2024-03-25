@@ -31,7 +31,7 @@ contract PPFX is IPPFX, Context {
     address public admin;
     address public insurance;
 
-    mapping(address => bool) operators;
+    mapping(address => bool) public operators;
     address[] public operatorList;
 
     IERC20 public usdt;
@@ -134,6 +134,13 @@ contract PPFX is IPPFX, Context {
      */
     function getAllOperators() external view returns (address[] memory) {
         return operatorList;
+    }
+
+    /**
+     * @dev Check if target address is operator.
+     */
+    function isOperator(address target) external view returns (bool) {
+        return operators[target];
     }
 
     /**
