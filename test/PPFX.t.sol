@@ -90,6 +90,38 @@ contract PPFXTest is Test {
         assertEq(ppfx.getAllOperators().length, 0);
     }
 
+    function test_SuccessWithdrawAllThenAddPosition() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+        ppfx.withdraw(1 ether);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
+        ppfx.addPosition(address(this), "BTC", 1 ether - 1, 1);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0);
+        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.totalBalance(address(this)), 1 ether);
+    }
+
+    function test_SuccessWithdrawHalfThenAddPosition() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+        ppfx.withdraw(0.5 ether);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
+        ppfx.addPosition(address(this), "BTC", 0.8 ether - 1, 1);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0);
+        assertEq(ppfx.fundingBalance(address(this)), 0.2 ether);
+        assertEq(ppfx.totalBalance(address(this)), 1 ether);
+    }
+
+    function test_SuccessWithdrawThenAddPositionWithEnoughFundingBalance() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+        ppfx.withdraw(0.5 ether);
+        ppfx.addPosition(address(this), "BTC", 0.4 ether - 1, 1);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.fundingBalance(address(this)), 0.1 ether);
+        assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
+    }
+
     function test_SuccessAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
@@ -453,6 +485,24 @@ contract PPFXTest is Test {
         vm.roll(6);
         ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
+    }
+
+    function testFail_WithdrawAllThenAddPosition() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+        ppfx.withdraw(1 ether);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
+        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
+        vm.expectRevert(bytes("Insufficient funding balance to add position"));
+    }
+
+    function testFail_WithdrawHalfThenAddPosition() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+        ppfx.withdraw(0.5 ether);
+        assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
+        ppfx.addPosition(address(this), "BTC", 1, 1);
+        vm.expectRevert(bytes("Insufficient funding balance to add position"));
     }
 
     function testFail_AddPositionInsufficientBalanceForFee() public {
