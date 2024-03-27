@@ -12,13 +12,13 @@ contract PPFX is IPPFX, Context {
     uint256 constant public MAX_UINT256 = 2**256 - 1;
 
     bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
-    bytes4 constant public REDUCE_POSITION_SELECTOR = 0x0e23f3d1; // bytes4(keccak256("reducePosition(address,string,uint256,uint256)"))
+    bytes4 constant public REDUCE_POSITION_SELECTOR = 0x292bd94c; // bytes4(keccak256("reducePosition(address,string,uint256,uint256,bool,uint256)"))
     bytes4 constant public CLOSE_POSITION_SELECTOR = 0x29228a43; // bytes4(keccak256("closePosition(address,string,uint256,uint256)"))
     bytes4 constant public CANCEL_ORDER_SELECTOR = 0x17a0b3e0; // bytes4(keccak256("cancelOrder(address,string,uint256,uint256)"))
     bytes4 constant public LIQUIDATE_SELECTOR = 0xdd5273dc; // bytes4(keccak256("liquidate(address,string,uint256,uint256)"))
 
     bytes4 constant public FILL_ORDER_SELECTOR = 0x21c5aa45; // bytes4(keccak256("fillOrder(address,string,uint256)"))
-    bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x394d3159; // bytes4(keccak256("settleFundingFee(address,string,uint256)"))
+    bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x640fd4b5; // bytes4(keccak256("settleFundingFee(address,string,uint256,bool)"))
     bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
     bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
 
