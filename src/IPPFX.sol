@@ -37,6 +37,8 @@ interface IPPFX {
 
     event Liquidated(address indexed user, string market, uint256 amount, uint256 fee);
 
+    event BulkProcessFailedTx(uint256 index, bytes reason);
+
     struct BulkStruct {
         bytes4 methodID;
         address user;
