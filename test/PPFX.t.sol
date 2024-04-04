@@ -422,6 +422,23 @@ contract PPFXTest is Test {
         assertEq(ppfx.fundingBalance(address(this)), 1 ether - 1 gwei);
     }
 
+    function test_SuccessBulkPositionUpdatesPartiallyFailed() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+       
+        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](30);
+        for (uint256 i = 0; i < 10; i++) {
+            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
+        }
+        for (uint256 i = 10; i < 30; i++) {
+            bs[i] = IPPFX.BulkStruct(0x12345678, address(this), "BTC", 1 gwei, 0, false, 0, false);
+        }
+
+        ppfx.bulkProcessFunctions(bs);
+
+        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 10 gwei);
+    }
+
     function test_SuccessEmptyBulkPositionUpdates() public {
         test_SuccessDeposit();
         test_AddMarket();
@@ -501,7 +518,7 @@ contract PPFXTest is Test {
         test_AddMarket();
         ppfx.withdraw(0.5 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
-        ppfx.addPosition(address(this), "BTC", 1, 1);
+        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
         vm.expectRevert(bytes("Insufficient funding balance to add position"));
     }
 
@@ -536,7 +553,7 @@ contract PPFXTest is Test {
 
         ppfx.reducePosition(address(this), "BTC", 1 ether, 1000000, false, 0);
 
-        vm.expectRevert(bytes("Insufficient trading balance to reduce position"));
+        vm.expectRevert(bytes("Insufficient trading balance to settle uPNL"));
     }
 
     function testFail_ClosePositionInsufficientBalanceForFee() public {
@@ -567,7 +584,7 @@ contract PPFXTest is Test {
     function testFail_FillOrderInsufficientBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.fillOrder(address(this), "BTC", 1);
+        ppfx.fillOrder(address(this), "BTC", 2 ether);
 
         vm.expectRevert(bytes("Insufficient trading balance to pay order filling fee"));
     }
@@ -634,23 +651,6 @@ contract PPFXTest is Test {
         ppfx.reduceCollateral(address(this), "BTC", 1 ether + 1);
 
         vm.expectRevert(bytes("Insufficient trading balance to reduce collateral"));
-    }
-
-    function testFail_BulkUpdatesSelectorNotFound() public {
-        test_SuccessDeposit();
-        test_AddMarket();
-       
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
-        for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-        for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
-        }
-
-        ppfx.bulkProcessFunctions(bs);
-
-        vm.expectRevert(bytes("FunctionSelectorNotFound"));
     }
 
     function testFail_NotAdmin() public {
