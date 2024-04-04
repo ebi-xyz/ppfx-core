@@ -381,28 +381,32 @@ contract PPFX is IPPFX, Context {
         BulkStruct[] memory bulkStructs
     ) external onlyOperator {
         for (uint256 i = 0; i < bulkStructs.length; i++) {
+            bytes memory sig;
             if (bulkStructs[i].methodID == ADD_POSITION_SELECTOR) {
-                _addPosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+                sig = abi.encodeWithSelector(ADD_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == REDUCE_POSITION_SELECTOR) {
-                _reducePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
+                sig = abi.encodeWithSelector(REDUCE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == CLOSE_POSITION_SELECTOR) {
-                _closePosition(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
+                sig = abi.encodeWithSelector(CLOSE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == CANCEL_ORDER_SELECTOR) {
-                _cancelOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+                sig = abi.encodeWithSelector(CANCEL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == LIQUIDATE_SELECTOR) {
-                _liquidate(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
+                sig = abi.encodeWithSelector(LIQUIDATE_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
             } else if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
-                _fillOrder(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+                sig = abi.encodeWithSelector(FILL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else if (bulkStructs[i].methodID == SETTLE_FUNDING_SELECTOR) {
-                _settleFundingFee(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
+                sig = abi.encodeWithSelector(SETTLE_FUNDING_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
             } else if (bulkStructs[i].methodID == ADD_COLLATERAL_SELECTOR) {
-                _addCollateral(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+                sig = abi.encodeWithSelector(ADD_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else if (bulkStructs[i].methodID == REDUCE_COLLATERAL_SELECTOR) {
-                _reduceCollateral(bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
+                sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
-                revert FunctionSelectorNotFound({
-                    methodID: bulkStructs[i].methodID
-                });
+                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", bulkStructs[i].methodID));
+                continue;
+            }
+            (bool success, bytes memory data) = address(this).delegatecall(sig);
+            if (!success) {
+                emit BulkProcessFailedTx(i, abi.encodePacked("function reverted:", data));
             }
         }
     }
@@ -602,7 +606,7 @@ contract PPFX is IPPFX, Context {
             _deductUserTradingBalance(user, market, total);
             userFundingBalance[user] += amount - uPNL;
         }
-
+        require(usdt.balanceOf(address(this)) >= fee, "Reduce Position: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
@@ -627,6 +631,7 @@ contract PPFX is IPPFX, Context {
             userFundingBalance[user] += amount - uPNL;
         }
 
+        require(usdt.balanceOf(address(this)) >= fee, "Close Position: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
@@ -646,15 +651,9 @@ contract PPFX is IPPFX, Context {
     function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        uint256 total = amount + fee;
-        uint256 userTradingBal = userTradingBalance[user][market];
-        require(userTradingBal >= total, "Trading balance must be larger than total amount to liquidate");
-
-        _deductUserTradingBalance(user, market, userTradingBal);
-
-        uint256 remaining = userTradingBal - total;
-        userFundingBalance[user] += remaining;
-
+        _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
+        userFundingBalance[user] += amount;
+        require(usdt.balanceOf(address(this)) >= fee, "Liquidate: Insufficient usdt balance to transfer fee to insurance");
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
     }
@@ -664,6 +663,7 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
         _deductUserTradingBalance(user, market, fee);
+        require(usdt.balanceOf(address(this)) >= fee, "FillOrder: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
     }
