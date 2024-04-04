@@ -402,6 +402,7 @@ contract PPFX is IPPFX, Context {
                 sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
                 emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", bulkStructs[i].methodID));
+                continue;
             }
             (bool success, bytes memory data) = address(this).delegatecall(sig);
             if (!success) {
