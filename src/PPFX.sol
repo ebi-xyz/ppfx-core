@@ -650,14 +650,8 @@ contract PPFX is IPPFX, Context {
     function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        uint256 total = amount + fee;
-        uint256 userTradingBal = userTradingBalance[user][market];
-        require(userTradingBal >= total, "Trading balance must be larger than total amount to liquidate");
-
-        _deductUserTradingBalance(user, market, userTradingBal);
-
-        uint256 remaining = userTradingBal - total;
-        userFundingBalance[user] += remaining;
+        _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
+        userFundingBalance[user] += amount;
         require(usdt.balanceOf(address(this)) >= fee, "Liquidate: Insufficient usdt balance to transfer fee to insurance");
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
