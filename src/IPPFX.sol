@@ -60,7 +60,7 @@ interface IPPFX {
      * @dev Get target address funding balance.
      * @return Target's funding balance.
      */
-    function fundingBalance(address target) external view returns (uint256);
+    function userFundingBalance(address target) external view returns (uint256);
 
     /**
      * @dev Get Sender total balance.
