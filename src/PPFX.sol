@@ -36,6 +36,7 @@ contract PPFX is IPPFX, Context {
 
     IERC20 public usdt;
 
+    uint256 public minimumOrderAmount;
     uint256 public withdrawalWaitTime;
     uint256 public totalTradingBalance;
 
@@ -75,7 +76,8 @@ contract PPFX is IPPFX, Context {
         address _treasury, 
         address _insurance, 
         IERC20 usdtAddress,
-        uint256 _withdrawalWaitTime
+        uint256 _withdrawalWaitTime,
+        uint256 _minimumOrderAmount
     ) {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
@@ -83,6 +85,7 @@ contract PPFX is IPPFX, Context {
         _addOperator(_msgSender());
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
+        _updateMinimumOrderAmount(_minimumOrderAmount);
     }
 
     /**
@@ -514,6 +517,20 @@ contract PPFX is IPPFX, Context {
         _updateWithdrawalWaitTime(newBlockTime);
     }
 
+    /**
+     * @dev Update minimum order amount.
+     * @param newMinOrderAmt The new minimum order amount.
+     *
+     * Emits a {NewMinimumOrderAmount} event.
+     *
+     * Requirements:
+     * - `newMinOrderAmt` cannot be zero.
+     */
+    function updateMinimumOrderAmount(uint256 newMinOrderAmt) external onlyAdmin {
+        require(newMinOrderAmt > 0, "Invalid new minimum order amount");
+        _updateMinimumOrderAmount(newMinOrderAmt);(newBlockTime);
+    }
+
     /****************************
      * Internal functions *
      ****************************/
@@ -579,6 +596,7 @@ contract PPFX is IPPFX, Context {
     function _addPosition(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
+        require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
         uint256 total = amount + fee;
         require(_fundingBalance(user) + pendingWithdrawalBalance[user] >= total, "Insufficient funding balance to add position");
 
@@ -591,6 +609,7 @@ contract PPFX is IPPFX, Context {
     function _reducePosition(address user, string memory marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
+        require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
         uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
@@ -775,6 +794,11 @@ contract PPFX is IPPFX, Context {
     function _updateWithdrawalWaitTime(uint256 newBlockTime) internal {
         withdrawalWaitTime = newBlockTime;
         emit NewWithdrawalWaitTime(newBlockTime);
+    }
+
+    function _updateMinimumOrderAmount(uint256 newMinOrderAmt) internal {
+        minimumOrderAmount = newMinOrderAmt;
+        emit NewMinimumOrderAmount(newMinOrderAmt);
     }
     
 }

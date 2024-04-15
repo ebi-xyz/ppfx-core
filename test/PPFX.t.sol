@@ -27,7 +27,8 @@ contract PPFXTest is Test {
             treasury,
             insurance,
             IERC20(address(usdt)),
-            5
+            5,
+            1
         );
     }
 
