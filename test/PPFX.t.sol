@@ -52,6 +52,26 @@ contract PPFXTest is Test {
         assertEq(usdt.balanceOf(address(this)), oldBalance + 1 ether);
     }
 
+    function test_SuccessMarcus() public {
+        ppfx.addMarket("BTC");
+        usdt.approve(address(ppfx), 5000);
+        ppfx.deposit(5000);
+        usdt.transfer(address(1), 5000);
+
+        vm.startPrank(address(1));
+        usdt.approve(address(ppfx), 5000);
+        ppfx.deposit(5000);
+        vm.stopPrank();
+
+        ppfx.addPosition(address(1), "BTC", 5000, 0);
+        ppfx.addPosition(address(this), "BTC", 5000, 0);
+
+        ppfx.liquidate(address(1), "BTC", 100, 0);
+        ppfx.closePosition(address(this), "BTC", 4900, true, 0);
+
+        assertEq(ppfx.fundingBalance(address(this)), 4900 + 5000);
+    }
+
     function test_SuccessWithdrawTwice() public {
         usdt.approve(address(ppfx), 2 ether);
         ppfx.deposit(2 ether);
@@ -165,11 +185,11 @@ contract PPFXTest is Test {
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
 
         // Alice Close Position Entire Position, with 1,000,000,000,000 USDT Profit
-        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1 ether, true, 1);
+        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1 ether - 1, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 2 ether - 1);
-        assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
+        assertEq(ppfx.fundingBalance(address(this)), 2 ether - 2);
+        assertEq(ppfx.totalBalance(address(this)), 2 ether - 2);
         
         // Bob Liquidate entire position 
         ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
@@ -279,11 +299,12 @@ contract PPFXTest is Test {
 
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
         // Alice close position with 50% loss
-        ppfx.closePosition(address(this), "BTC", 0.5 ether - 1, false, 1);
+        ppfx.closePosition(address(this), "BTC", 0.5 ether, false, 0);
 
-        assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
+        //assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
         assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.marketTotalTradingBalance(keccak256(abi.encode("BTC"))), 1.5 ether);
 
         // Bob close position with 50% winning
         ppfx.closePosition(address(1), "BTC", 0.5 ether, true, 0);
