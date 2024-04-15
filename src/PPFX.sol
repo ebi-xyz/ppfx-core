@@ -31,6 +31,8 @@ contract PPFX is IPPFX, Context {
     address public admin;
     address public insurance;
 
+    address private pendingAdmin;
+
     mapping(address => bool) public operators;
     address[] public operatorList;
 
@@ -411,9 +413,33 @@ contract PPFX is IPPFX, Context {
         }
     }
 
+    /**
+     * @dev Accept admin role
+     * Emits a {NewAdmin} event.
+     *     
+     */
+     function acceptAdmin() external {
+        require(_msgSender() == pendingAdmin, "Caller not pendingAdmin");
+        _updateAdmin(pendingAdmin);
+     }
+
+
     /****************************
      * Admin only functions *
      ****************************/
+
+    /**
+     * @dev Update Admin account.
+     * @param adminAddr The new admin address.     
+     * Emits a {TransferAdmin} event.
+     * 
+     * Requirements:
+     * - `adminAddr` cannot be the zero address.
+     */
+    function transferAdmin(address adminAddr) external onlyAdmin() {
+        require(_msgSender() == pendingAdmin, "Admin address can not be zero");
+        _transferAdmin(adminAddr);
+    }
 
     /**
      * @dev Update Treasury account.
@@ -709,6 +735,12 @@ contract PPFX is IPPFX, Context {
         availableMarkets.push(market);
         marketExists[market] = true;
         emit NewMarketAdded(market, marketName);
+    }
+
+    function _transferAdmin(address adminAddr) internal {
+        require(adminAddr != address(0), "Admin address can not be zero");
+        pendingAdmin = adminAddr;
+        emit TransferAdmin(adminAddr);
     }
 
     function _updateAdmin(address adminAddr) internal {

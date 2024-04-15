@@ -15,7 +15,8 @@ interface IPPFX {
     event NewUSDT(address indexed newUSDTAddress);
     event NewMarketAdded(bytes32 market, string marketName);
     event NewWithdrawalWaitTime(uint256 newWaitTime);
-    
+    event TransferAdmin(address indexed newAdminAddress);
+
     event NewUserTradingVault(address newTradingVaultAddr);
     event NewUserFundingVault(address newFundingVaultAddr);
 
