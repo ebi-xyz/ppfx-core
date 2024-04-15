@@ -52,7 +52,7 @@ contract PPFXTest is Test {
         assertEq(usdt.balanceOf(address(this)), oldBalance + 1 ether);
     }
 
-    function test_SuccessMarcus() public {
+    function test_SuccessLiquidateAndClosePositionSameAmount() public {
         ppfx.addMarket("BTC");
         usdt.approve(address(ppfx), 5000);
         ppfx.deposit(5000);
@@ -70,6 +70,26 @@ contract PPFXTest is Test {
         ppfx.closePosition(address(this), "BTC", 4900, true, 0);
 
         assertEq(ppfx.fundingBalance(address(this)), 4900 + 5000);
+    }
+
+    function test_SuccessLiquidateAndClosePositionDiffAmount() public {
+        ppfx.addMarket("BTC");
+        usdt.approve(address(ppfx), 5000);
+        ppfx.deposit(5000);
+        usdt.transfer(address(1), 5500);
+
+        vm.startPrank(address(1));
+        usdt.approve(address(ppfx), 5500);
+        ppfx.deposit(5500);
+        vm.stopPrank();
+
+        ppfx.addPosition(address(1), "BTC", 5500, 0);
+        ppfx.addPosition(address(this), "BTC", 5000, 0);
+
+        ppfx.liquidate(address(1), "BTC", 100, 0);
+        ppfx.closePosition(address(this), "BTC", 5400, true, 0);
+
+        assertEq(ppfx.fundingBalance(address(this)), 5400 + 5000);
     }
 
     function test_SuccessWithdrawTwice() public {
