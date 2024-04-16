@@ -139,7 +139,7 @@ contract PPFXTest is Test {
         ppfx.deposit(1 ether);
         vm.stopPrank();
 
-        if (!ppfx.marketExists(keccak256(abi.encode("BTC")))) {
+        if (!ppfx.marketExists(keccak256(bytes("BTC")))) {
             test_AddMarket();
         }
         
