@@ -37,8 +37,9 @@ interface IPPFX {
     event CollateralDeducted(address indexed user, string market, uint256 amount);
 
     event Liquidated(address indexed user, string market, uint256 amount, uint256 fee);
-
-    event BulkProcessFailedTx(uint256 index, bytes reason);
+    
+    event BulkProcessFailedTxSelectorNotFound(uint256 indexed txIndex, bytes4 methodID);
+    event BulkProcessFailedTxReverted(uint256 indexed txIndex, bytes data);
 
     struct BulkStruct {
         bytes4 methodID;
