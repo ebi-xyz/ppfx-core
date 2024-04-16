@@ -5,9 +5,10 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPPFX} from "./IPPFX.sol";
 
-contract PPFX is IPPFX, Context {
+contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     uint256 constant public MAX_UINT256 = 2**256 - 1;
 
@@ -149,7 +150,7 @@ contract PPFX is IPPFX, Context {
      * 
      * Emits a {UserDeposit} event.
      */
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "Invalid amount");
         usdt.safeTransferFrom(_msgSender(), address(this), amount);
         userFundingBalance[_msgSender()] += amount;
@@ -179,7 +180,7 @@ contract PPFX is IPPFX, Context {
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawal() external {
+    function claimPendingWithdrawal() external nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
         require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
