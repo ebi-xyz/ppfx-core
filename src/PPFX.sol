@@ -638,6 +638,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
+        require(userTradingBalance[user][market] >= amount + fee, "Insufficient trading balance to liquidate");
         _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
         userFundingBalance[user] += amount;
         usdt.safeTransfer(insurance, fee);
