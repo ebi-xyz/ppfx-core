@@ -87,14 +87,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     }
 
     /**
-     * @dev Get target address funding balance.
-     * @return Target's funding balance.
-     */
-    function fundingBalance(address target) external view returns (uint256) {
-        return _fundingBalance(target);
-    }
-
-    /**
      * @dev Get total trading balance across all available markets.
      */
     function getTradingBalance(address target) external view returns (uint256) {
@@ -113,7 +105,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @dev Get total balance across trading and funding balance.
      */
     function totalBalance(address target) external view returns (uint256) {
-        return _fundingBalance(target) + _tradingBalance(target);
+        return userFundingBalance[target] + _tradingBalance(target);
     }
 
     /**
@@ -166,7 +158,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      */
     function withdraw(uint256 amount) external {
         require(amount > 0, "Invalid amount");
-        require(_fundingBalance(_msgSender()) >= amount, "Insufficient balance from funding account");
+        require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
         lastWithdrawalBlock[_msgSender()] = block.number;
@@ -531,10 +523,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         return balSum;
     }
 
-    function _fundingBalance(address user) internal view returns (uint256) {
-        return userFundingBalance[user];
-    }
-
     function _deductUserTradingBalance(address user, bytes32 market, uint256 amount) internal {
         userTradingBalance[user][market] -= amount;
         totalTradingBalance -= amount;
@@ -581,7 +569,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         uint256 total = amount + fee;
-        require(_fundingBalance(user) + pendingWithdrawalBalance[user] >= total, "Insufficient funding balance to add position");
+        require(userFundingBalance[user] + pendingWithdrawalBalance[user] >= total, "Insufficient funding balance to add position");
 
         _deductUserFundingBalance(user, total);
         _addUserTradingBalance(user, market, total);
@@ -685,7 +673,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function _addCollateral(address user, string memory marketName, uint256 amount) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(_fundingBalance(user) + pendingWithdrawalBalance[user] >= amount, "Insufficient funding balance to add collateral");
+        require(userFundingBalance[user] + pendingWithdrawalBalance[user] >= amount, "Insufficient funding balance to add collateral");
         _deductUserFundingBalance(user, amount);
         _addUserTradingBalance(user, market, amount);
         emit CollateralAdded(user, marketName, amount);
