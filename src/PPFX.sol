@@ -164,8 +164,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
-        lastWithdrawalBlock[_msgSender()] = block.number;
-        emit UserWithdrawal(_msgSender(), amount, block.number + withdrawalWaitTime);
+        lastWithdrawalBlock[_msgSender()] = block.timestamp;
+        emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
     }
 
     /**
@@ -178,11 +178,11 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function claimPendingWithdrawal() external nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        require(block.timestamp >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
         usdt.safeTransfer(_msgSender(), pendingBal);
         pendingWithdrawalBalance[_msgSender()] = 0;
         lastWithdrawalBlock[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.number);
+        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
     }
 
     /****************************
@@ -498,16 +498,16 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     /**
      * @dev Update withdrawal wait time.
-     * @param newBlockTime The new withdrawal wait time.
+     * @param newWaitTime The new withdrawal wait time.
      *
      * Emits a {NewWithdrawalWaitTime} event.
      *
      * Requirements:
-     * - `newBlockTime` cannot be zero.
+     * - `newWaitTime` cannot be zero.
      */
-    function updateWithdrawalWaitTime(uint256 newBlockTime) external onlyAdmin {
-        require(newBlockTime > 0, "Invalid new block time");
-        _updateWithdrawalWaitTime(newBlockTime);
+    function updateWithdrawalWaitTime(uint256 newWaitTime) external onlyAdmin {
+        require(newWaitTime > 0, "Invalid new wait time");
+        _updateWithdrawalWaitTime(newWaitTime);
     }
 
     /**
@@ -562,7 +562,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 // Subtracting `amount` from pending withdrawal balance and
                 // reset the withdrawal countdown
                 pendingWithdrawalBalance[user] -= amount;
-                lastWithdrawalBlock[user] = block.number;
+                lastWithdrawalBlock[user] = block.timestamp;
             } else { // `amount` is >= pending withdrawal balance
                 // Clear pending withdrawal balance
                 uint256 remaining = amount - pendingWithdrawalBalance[user];
