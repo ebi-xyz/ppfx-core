@@ -321,7 +321,6 @@ contract PPFXTest is Test {
         // Alice close position with 50% loss
         ppfx.closePosition(address(this), "BTC", 0.5 ether, false, 0);
 
-        //assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
         assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
         assertEq(ppfx.marketTotalTradingBalance(keccak256(abi.encode("BTC"))), 1.5 ether);
