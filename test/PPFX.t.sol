@@ -777,4 +777,31 @@ contract PPFXTest is Test {
         vm.expectRevert(bytes("Provided market does not exists"));
     }
 
+    function testFail_TransferAdminNotAllowed() public {
+        vm.startPrank(address(0));
+
+        ppfx.transferAdmin(address(1));
+        vm.expectRevert(bytes("Caller not admin"));
+        
+        vm.stopPrank();
+    }
+
+    function test_SuccessTransferAdmin() public {
+        ppfx.transferAdmin(address(4));
+
+        vm.startPrank(address(4));
+
+        ppfx.acceptAdmin();
+        assertEq(ppfx.admin(), address(4));
+
+        vm.stopPrank();
+    }
+
+    function testFail_AcceptAdmin() public {
+        ppfx.transferAdmin(address(4));
+
+        vm.startPrank(address(5));
+        ppfx.acceptAdmin();
+        vm.expectRevert(bytes("Caller not admin"));
+    }
 }
