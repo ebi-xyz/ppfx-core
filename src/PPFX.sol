@@ -5,9 +5,10 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPPFX} from "./IPPFX.sol";
 
-contract PPFX is IPPFX, Context {
+contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     uint256 constant public MAX_UINT256 = 2**256 - 1;
 
@@ -141,9 +142,8 @@ contract PPFX is IPPFX, Context {
      * 
      * Emits a {UserDeposit} event.
      */
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "Invalid amount");
-        require(usdt.allowance(_msgSender(), address(this)) >= amount, "Insufficient allowance");
         usdt.safeTransferFrom(_msgSender(), address(this), amount);
         userFundingBalance[_msgSender()] += amount;
         emit UserDeposit(_msgSender(), amount);
@@ -172,14 +172,14 @@ contract PPFX is IPPFX, Context {
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawal() external {
-        require(pendingWithdrawalBalance[_msgSender()] > 0, "Insufficient pending withdrawal balance");
+    function claimPendingWithdrawal() external nonReentrant {
+        uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
+        require(pendingBal > 0, "Insufficient pending withdrawal balance");
         require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
-        usdt.safeTransfer(_msgSender(), pendingWithdrawalBalance[_msgSender()]);
-        uint256 withdrew = pendingWithdrawalBalance[_msgSender()];
+        usdt.safeTransfer(_msgSender(), pendingBal);
         pendingWithdrawalBalance[_msgSender()] = 0;
         lastWithdrawalBlock[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), withdrew, block.number);
+        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.number);
     }
 
     /****************************
@@ -370,30 +370,31 @@ contract PPFX is IPPFX, Context {
      *
      */
     function bulkProcessFunctions(
-        BulkStruct[] memory bulkStructs
+        BulkStruct[] calldata bulkStructs
     ) external onlyOperator {
         for (uint256 i = 0; i < bulkStructs.length; i++) {
             bytes memory sig;
-            if (bulkStructs[i].methodID == ADD_POSITION_SELECTOR) {
+            bytes4 methodID = bulkStructs[i].methodID;
+            if (methodID == ADD_POSITION_SELECTOR) {
                 sig = abi.encodeWithSelector(ADD_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == REDUCE_POSITION_SELECTOR) {
+            } else if (methodID == REDUCE_POSITION_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == CLOSE_POSITION_SELECTOR) {
+            } else if (methodID == CLOSE_POSITION_SELECTOR) {
                 sig = abi.encodeWithSelector(CLOSE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == CANCEL_ORDER_SELECTOR) {
+            } else if (methodID == CANCEL_ORDER_SELECTOR) {
                 sig = abi.encodeWithSelector(CANCEL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == LIQUIDATE_SELECTOR) {
+            } else if (methodID == LIQUIDATE_SELECTOR) {
                 sig = abi.encodeWithSelector(LIQUIDATE_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
+            } else if (methodID == FILL_ORDER_SELECTOR) {
                 sig = abi.encodeWithSelector(FILL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (bulkStructs[i].methodID == SETTLE_FUNDING_SELECTOR) {
+            } else if (methodID == SETTLE_FUNDING_SELECTOR) {
                 sig = abi.encodeWithSelector(SETTLE_FUNDING_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
-            } else if (bulkStructs[i].methodID == ADD_COLLATERAL_SELECTOR) {
+            } else if (methodID == ADD_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(ADD_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (bulkStructs[i].methodID == REDUCE_COLLATERAL_SELECTOR) {
+            } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", bulkStructs[i].methodID));
+                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", methodID));
                 continue;
             }
             (bool success, bytes memory data) = address(this).delegatecall(sig);
@@ -511,7 +512,7 @@ contract PPFX is IPPFX, Context {
      ****************************/
 
     function _marketHash(string memory marketName) internal pure returns (bytes32) {
-        return keccak256(abi.encode(marketName));
+        return keccak256(bytes(marketName));
     }
 
     function _tradingBalance(address user) internal view returns (uint256) {
@@ -594,7 +595,6 @@ contract PPFX is IPPFX, Context {
             _deductUserTradingBalance(user, market, total);
             userFundingBalance[user] += amount - uPNL;
         }
-        require(usdt.balanceOf(address(this)) >= fee, "Reduce Position: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
@@ -619,7 +619,6 @@ contract PPFX is IPPFX, Context {
             userFundingBalance[user] += amount - uPNL;
         }
 
-        require(usdt.balanceOf(address(this)) >= fee, "Close Position: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
@@ -641,7 +640,6 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
         userFundingBalance[user] += amount;
-        require(usdt.balanceOf(address(this)) >= fee, "Liquidate: Insufficient usdt balance to transfer fee to insurance");
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
     }
@@ -651,7 +649,6 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
         _deductUserTradingBalance(user, market, fee);
-        require(usdt.balanceOf(address(this)) >= fee, "FillOrder: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
     }
@@ -711,7 +708,8 @@ contract PPFX is IPPFX, Context {
     }
 
     function _removeAllOperator() internal {
-        for (uint i = 0; i < operatorList.length; i++) {
+        uint operatorListLen = operatorList.length;
+        for (uint i = 0; i < operatorListLen; i++) {
             operators[operatorList[i]] = false;
             emit OperatorRemoved(operatorList[i]);
         }
