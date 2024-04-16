@@ -237,7 +237,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @param isProfit Profit or Loss. 
      * @param fee USDT Fee for closing position.
      *
-     * Emits a {PositionClosed} event, trading balance of `marketName` set to 0,
+     * Emits a {PositionReduced} event, trading balance of `marketName` set to 0,
      * transfer `trading balance - fee` to funding balance,
      * transfer `fee` from contract to treasury account. 
      *
@@ -397,12 +397,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", methodID));
+                emit BulkProcessFailedTxSelectorNotFound(i, methodID);
                 continue;
             }
             (bool success, bytes memory data) = address(this).delegatecall(sig);
             if (!success) {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function reverted:", data));
+                emit BulkProcessFailedTxReverted(i, data);
             }
         }
     }
@@ -521,7 +521,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      */
     function updateMinimumOrderAmount(uint256 newMinOrderAmt) external onlyAdmin {
         require(newMinOrderAmt > 0, "Invalid new minimum order amount");
-        _updateMinimumOrderAmount(newMinOrderAmt);(newBlockTime);
+        _updateMinimumOrderAmount(newMinOrderAmt);
     }
 
     /****************************
@@ -534,7 +534,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function _tradingBalance(address user) internal view returns (uint256) {
         uint256 balSum = 0;
-        for (uint i = 0; i < availableMarkets.length; i++) {
+        uint marketsLen = availableMarkets.length;
+        for (uint i = 0; i < marketsLen; i++) {
             balSum += userTradingBalance[user][availableMarkets[i]];
         }
         return balSum;
@@ -602,7 +603,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
-        if (isProfit == true) {
+        if (isProfit) {
             // Solvency check
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
@@ -618,28 +619,13 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit PositionReduced(user, marketName, amount, fee);
     }
 
-    // TODO: refactor to call _reducePosition?
     function _closePosition(address user, string memory marketName, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay fee and close position");
-        uint256 amount = userTradingBalance[user][market] - fee;
-
-        if (isProfit == true) {
-            // Solvency check
-            require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
-
-            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += amount + uPNL;
-        } else {
-            require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
-
-            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += amount - uPNL;
-        }
-
-        usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, amount, fee);
+        // Make sure its able to subtract fee with user trading balance
+        // _reducePosition() will do other checks
+        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to close position");
+        _reducePosition(user, marketName, userTradingBalance[user][market] - fee, uPNL, isProfit, fee);
     }
 
     function _cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) internal {
