@@ -10,8 +10,6 @@ import {IPPFX} from "./IPPFX.sol";
 
 contract PPFX is IPPFX, Context, ReentrancyGuard {
 
-    uint256 constant public MAX_UINT256 = 2**256 - 1;
-
     bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
     bytes4 constant public REDUCE_POSITION_SELECTOR = 0x292bd94c; // bytes4(keccak256("reducePosition(address,string,uint256,uint256,bool,uint256)"))
     bytes4 constant public CLOSE_POSITION_SELECTOR = 0x29228a43; // bytes4(keccak256("closePosition(address,string,uint256,uint256)"))
@@ -22,8 +20,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x640fd4b5; // bytes4(keccak256("settleFundingFee(address,string,uint256,bool)"))
     bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
     bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
-
-    error FunctionSelectorNotFound(bytes4 methodID);
 
     using Math for uint256;
     using SafeERC20 for IERC20;
