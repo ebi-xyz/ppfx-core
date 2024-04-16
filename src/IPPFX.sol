@@ -22,7 +22,7 @@ interface IPPFX {
 
     event UserDeposit(address indexed user, uint256 amount);
     event UserWithdrawal(address indexed user, uint256 amount, uint256 availableAt);
-    event UserClaimedWithdrawal(address indexed user, uint256 amount, uint256 claimedAtBlock);
+    event UserClaimedWithdrawal(address indexed user, uint256 amount, uint256 claimedAt);
 
     event PositionAdded(address indexed user, string market, uint256 size, uint256 fee);
     event PositionReduced(address indexed user, string market, uint256 size, uint256 fee);
@@ -37,7 +37,7 @@ interface IPPFX {
     event CollateralDeducted(address indexed user, string market, uint256 amount);
 
     event Liquidated(address indexed user, string market, uint256 amount, uint256 fee);
-    
+
     event BulkProcessFailedTxSelectorNotFound(uint256 indexed txIndex, bytes4 methodID);
     event BulkProcessFailedTxReverted(uint256 indexed txIndex, bytes data);
 
