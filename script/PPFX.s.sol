@@ -27,7 +27,8 @@ contract PPFXScript is Script {
             deployerAddr,
             deployerAddr,
             IERC20(address(usdt)),
-            5
+            5,
+            1
         );
 
         vm.stopBroadcast();
