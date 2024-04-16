@@ -139,7 +139,7 @@ contract PPFXTest is Test {
         ppfx.deposit(1 ether);
         vm.stopPrank();
 
-        if (!ppfx.marketExists(keccak256(abi.encode("BTC")))) {
+        if (!ppfx.marketExists(keccak256(bytes("BTC")))) {
             test_AddMarket();
         }
         
@@ -172,7 +172,7 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
         
         // Bob Liquidate entire position 
-        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+        ppfx.liquidate(address(1), "BTC", 0, 1);
 
         // Bob should have no balance left
         assertEq(ppfx.totalBalance(address(1)), 0);
@@ -194,7 +194,7 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
 
         // Bob Liquidate entire position 
-        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+        ppfx.liquidate(address(1), "BTC", 0, 1);
 
         // Bob should have no balance left
         assertEq(ppfx.totalBalance(address(1)), 0);
@@ -216,7 +216,7 @@ contract PPFXTest is Test {
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
 
         // Bob Liquidate entire position 
-        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+        ppfx.liquidate(address(1), "BTC", 0, 1);
 
         // Bob should have no balance left
         assertEq(ppfx.totalBalance(address(1)), 0);
@@ -354,10 +354,10 @@ contract PPFXTest is Test {
     function test_SuccessLiquidateEntireBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.liquidate(address(this), "BTC", ppfx.getTradingBalanceForMarket(address(this), "BTC") - 1 gwei, 1 gwei);
+        ppfx.liquidate(address(this), "BTC", 1 gwei, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
-        assertEq(ppfx.totalBalance(address(this)), 0);
+        assertEq(ppfx.totalBalance(address(this)), 1 gwei);
     }
 
     function test_SuccessLiquidateHalfBalance() public {
@@ -366,7 +366,7 @@ contract PPFXTest is Test {
         ppfx.liquidate(address(this), "BTC", bal / 2, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
-        assertEq(ppfx.userFundingBalance(address(this)), bal / 2 - 1 gwei);
+        assertEq(ppfx.fundingBalance(address(this)), bal / 2);
     }
 
     function test_SuccessAddCollateral() public {
