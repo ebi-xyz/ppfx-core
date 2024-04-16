@@ -317,7 +317,6 @@ contract PPFXTest is Test {
         // Bob Short BTC with 1,000,000,000,000 USDT
         test_2ndAddrSuccessAddPosition(); 
 
-        uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
         // Alice close position with 50% loss
         ppfx.closePosition(address(this), "BTC", 0.5 ether, false, 0);
 
