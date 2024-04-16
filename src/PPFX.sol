@@ -420,7 +420,9 @@ contract PPFX is IPPFX, Context {
      */
      function acceptAdmin() external {
         require(_msgSender() == pendingAdmin, "Caller not pendingAdmin");
+        require(pendingAdmin != address(0));
         _updateAdmin(pendingAdmin);
+        pendingAdmin == address(0);
      }
 
 
@@ -437,7 +439,7 @@ contract PPFX is IPPFX, Context {
      * - `adminAddr` cannot be the zero address.
      */
     function transferAdmin(address adminAddr) external onlyAdmin() {
-        require(_msgSender() == pendingAdmin, "Admin address can not be zero");
+        require(adminAddr != address(0), "Admin address can not be zero");
         _transferAdmin(adminAddr);
     }
 

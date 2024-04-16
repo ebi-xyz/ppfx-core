@@ -802,6 +802,6 @@ contract PPFXTest is Test {
 
         vm.startPrank(address(5));
         ppfx.acceptAdmin();
-        vm.expectRevert(bytes("Caller not admin"));
+        vm.expectRevert(bytes("Caller not pendingAdmin"));
     }
 }
