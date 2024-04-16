@@ -86,6 +86,16 @@ contract PPFXTest is Test {
         assertEq(ppfx.getAllOperators().length, 1);
         ppfx.addOperator(address(1));
         assertEq(ppfx.getAllOperators().length, 2);
+
+        ppfx.removeAllOperator();
+        assertEq(ppfx.getAllOperators().length, 0);
+        assertEq(ppfx.isOperator(address(1)), false);
+
+        ppfx.addOperator(address(555));
+        assertEq(ppfx.getAllOperators().length, 1);
+        ppfx.addOperator(address(6666));
+        assertEq(ppfx.getAllOperators().length, 2);
+        
         ppfx.removeAllOperator();
         assertEq(ppfx.getAllOperators().length, 0);
     }

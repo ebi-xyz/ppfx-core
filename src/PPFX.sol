@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT 
 pragma solidity ^0.8.20;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -8,6 +9,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IPPFX} from "./IPPFX.sol";
 
 contract PPFX is IPPFX, Context {
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     uint256 constant public MAX_UINT256 = 2**256 - 1;
 
@@ -31,8 +33,7 @@ contract PPFX is IPPFX, Context {
     address public admin;
     address public insurance;
 
-    mapping(address => bool) public operators;
-    address[] public operatorList;
+    EnumerableSet.AddressSet private operators;
 
     IERC20 public usdt;
 
@@ -63,7 +64,7 @@ contract PPFX is IPPFX, Context {
      * @dev Throws if called by any accoutn other than the Operator
      */
     modifier onlyOperator {
-        require(operators[_msgSender()], "Caller not operator");
+        require(operators.contains(_msgSender()), "Caller not operator");
         _;
     }
 
@@ -133,14 +134,14 @@ contract PPFX is IPPFX, Context {
      * @dev Get all operator address.
      */
     function getAllOperators() external view returns (address[] memory) {
-        return operatorList;
+        return operators.values();
     }
 
     /**
      * @dev Check if target address is operator.
      */
     function isOperator(address target) external view returns (bool) {
-        return operators[target];
+        return operators.contains(target);
     }
 
     /**
@@ -441,7 +442,7 @@ contract PPFX is IPPFX, Context {
      */
     function addOperator(address operatorAddr) external onlyAdmin {
         require(operatorAddr != address(0), "Operator address can not be zero");
-        require(!operators[operatorAddr], "Operator already exists");
+        require(!operators.contains(operatorAddr), "Operator already exists");
         _addOperator(operatorAddr);
     }
 
@@ -457,7 +458,7 @@ contract PPFX is IPPFX, Context {
      */
     function removeOperator(address operatorAddr) external onlyAdmin {
         require(operatorAddr != address(0), "Operator address can not be zero");
-        require(operators[operatorAddr], "Operator does not exists");
+        require(operators.contains(operatorAddr), "Operator does not exists");
         _removeOperator(operatorAddr);
     }
 
@@ -468,7 +469,7 @@ contract PPFX is IPPFX, Context {
      *
      */
     function removeAllOperator() external onlyAdmin {
-        require(operatorList.length > 0, "No operator found");
+        require(operators.length() > 0, "No operator found");
         _removeAllOperator();
     }
 
@@ -723,42 +724,22 @@ contract PPFX is IPPFX, Context {
     }
 
     function _removeAllOperator() internal {
-        for (uint i = 0; i < operatorList.length; i++) {
-            operators[operatorList[i]] = false;
-            emit OperatorRemoved(operatorList[i]);
+        address[] memory operatorList = operators.values();
+        uint operatorLen = operatorList.length;
+        for (uint i = 0; i < operatorLen; i++) {
+            address operatorToBeRemoved = operatorList[i];
+            operators.remove(operatorToBeRemoved);
+            emit OperatorRemoved(operatorToBeRemoved);
         }
-
-        delete operatorList;
     }
 
     function _removeOperator(address operatorAddr) internal {
-        if (operatorList[operatorList.length - 1] == operatorAddr) {
-            operators[operatorAddr] = false;
-            operatorList.pop();
-            emit OperatorRemoved(operatorAddr);
-            return;
-        }
-
-        bool found = false;
-        for (uint i = 0; i < operatorList.length - 1; i++) {
-            if (operatorList[i] == operatorAddr) {
-                found = true;
-            }
-            if (found) {
-                operatorList[i] = operatorList[i + 1];
-            }
-        }
-
-        require(found, "Target operator address not found");
-
-        operators[operatorAddr] = false;
-        operatorList.pop();
+        operators.remove(operatorAddr);
         emit OperatorRemoved(operatorAddr);
     }
 
     function _addOperator(address operatorAddr) internal {
-        operators[operatorAddr] = true;
-        operatorList.push(operatorAddr);
+        operators.add(operatorAddr);
         emit NewOperator(operatorAddr);
     }
 
