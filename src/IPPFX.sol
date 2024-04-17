@@ -15,10 +15,8 @@ interface IPPFX {
     event NewUSDT(address indexed newUSDTAddress);
     event NewMarketAdded(bytes32 market, string marketName);
     event NewWithdrawalWaitTime(uint256 newWaitTime);
+    event NewMinimumOrderAmount(uint256 newMinOrderAmt);
     event TransferAdmin(address indexed newAdminAddress);
-
-    event NewUserTradingVault(address newTradingVaultAddr);
-    event NewUserFundingVault(address newFundingVaultAddr);
 
     event UserDeposit(address indexed user, uint256 amount);
     event UserWithdrawal(address indexed user, uint256 amount, uint256 availableAt);
@@ -61,7 +59,7 @@ interface IPPFX {
      * @dev Get target address funding balance.
      * @return Target's funding balance.
      */
-    function fundingBalance(address target) external view returns (uint256);
+    function userFundingBalance(address target) external view returns (uint256);
 
     /**
      * @dev Get Sender total balance.
