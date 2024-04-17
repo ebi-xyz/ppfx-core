@@ -387,7 +387,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     ) external onlyOperator {
         uint256 sigLen = signatures.length;
         for (uint256 i = 0; i < sigLen; i++) {
-            bytes4 selector = bytes4(signatures[i][:4]);
+            bytes4 selector = bytes4(signatures[i]);
             if (!availableFunctionSelector[selector]) {
                 emit BulkProcessFailedTxSelectorNotFound(i, selector);
                 continue;
