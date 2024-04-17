@@ -47,10 +47,50 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(6);
+        vm.warp(block.timestamp + 5);
         uint256 oldBalance = usdt.balanceOf(address(this));
         ppfx.claimPendingWithdrawal();
         assertEq(usdt.balanceOf(address(this)), oldBalance + 1 ether);
+    }
+
+    function test_SuccessLiquidateAndClosePositionSameAmount() public {
+        ppfx.addMarket("BTC");
+        usdt.approve(address(ppfx), 5000);
+        ppfx.deposit(5000);
+        usdt.transfer(address(1), 5000);
+
+        vm.startPrank(address(1));
+        usdt.approve(address(ppfx), 5000);
+        ppfx.deposit(5000);
+        vm.stopPrank();
+
+        ppfx.addPosition(address(1), "BTC", 5000, 0);
+        ppfx.addPosition(address(this), "BTC", 5000, 0);
+
+        ppfx.liquidate(address(1), "BTC", 100, 0);
+        ppfx.closePosition(address(this), "BTC", 4900, true, 0);
+
+        assertEq(ppfx.userFundingBalance(address(this)), 4900 + 5000);
+    }
+
+    function test_SuccessLiquidateAndClosePositionDiffAmount() public {
+        ppfx.addMarket("BTC");
+        usdt.approve(address(ppfx), 5000);
+        ppfx.deposit(5000);
+        usdt.transfer(address(1), 5500);
+
+        vm.startPrank(address(1));
+        usdt.approve(address(ppfx), 5500);
+        ppfx.deposit(5500);
+        vm.stopPrank();
+
+        ppfx.addPosition(address(1), "BTC", 5500, 0);
+        ppfx.addPosition(address(this), "BTC", 5000, 0);
+
+        ppfx.liquidate(address(1), "BTC", 100, 0);
+        ppfx.closePosition(address(this), "BTC", 5400, true, 0);
+
+        assertEq(ppfx.userFundingBalance(address(this)), 5400 + 5000);
     }
 
     function test_SuccessWithdrawTwice() public {
@@ -60,10 +100,10 @@ contract PPFXTest is Test {
 
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(2);
+        vm.warp(block.timestamp + 2);
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
-        vm.roll(7);
+        vm.warp(block.timestamp + 7);
         uint256 oldBalance = usdt.balanceOf(address(this));
         ppfx.claimPendingWithdrawal();
         assertEq(usdt.balanceOf(address(this)), oldBalance + 2 ether);
@@ -87,6 +127,16 @@ contract PPFXTest is Test {
         assertEq(ppfx.getAllOperators().length, 1);
         ppfx.addOperator(address(1));
         assertEq(ppfx.getAllOperators().length, 2);
+
+        ppfx.removeAllOperator();
+        assertEq(ppfx.getAllOperators().length, 0);
+        assertEq(ppfx.isOperator(address(1)), false);
+
+        ppfx.addOperator(address(555));
+        assertEq(ppfx.getAllOperators().length, 1);
+        ppfx.addOperator(address(6666));
+        assertEq(ppfx.getAllOperators().length, 2);
+        
         ppfx.removeAllOperator();
         assertEq(ppfx.getAllOperators().length, 0);
     }
@@ -166,11 +216,12 @@ contract PPFXTest is Test {
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
 
         // Alice Close Position Entire Position, with 1,000,000,000,000 USDT Profit
-        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1 ether, true, 1);
+        ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1 ether - 1, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.userFundingBalance(address(this)), 2 ether - 1);
-        assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
+
+        assertEq(ppfx.userFundingBalance(address(this)), 2 ether - 2);
+        assertEq(ppfx.totalBalance(address(this)), 2 ether - 2);
         
         // Bob Liquidate entire position 
         ppfx.liquidate(address(1), "BTC", 0, 1);
@@ -188,10 +239,10 @@ contract PPFXTest is Test {
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
         // Alice Reduce Position, Getting 1,000,000,000,000 USDT Profit
         // With no reduce in her position
-        ppfx.reducePosition(address(this), "BTC", 0, 1 ether, true, 1);
+        ppfx.reducePosition(address(this), "BTC", 1, 1 ether, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether + 1);
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
 
         // Bob Liquidate entire position 
@@ -278,13 +329,13 @@ contract PPFXTest is Test {
         // Bob Short BTC with 1,000,000,000,000 USDT
         test_2ndAddrSuccessAddPosition(); 
 
-        uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
         // Alice close position with 50% loss
-        ppfx.closePosition(address(this), "BTC", 0.5 ether - 1, false, 1);
+        ppfx.closePosition(address(this), "BTC", 0.5 ether, false, 0);
 
-        assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
         assertEq(ppfx.userFundingBalance(address(this)), 0.5 ether);
+
         assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.marketTotalTradingBalance(keccak256(bytes("BTC"))), 1.5 ether);
 
         // Bob close position with 50% winning
         ppfx.closePosition(address(1), "BTC", 0.5 ether, true, 0);
@@ -367,7 +418,7 @@ contract PPFXTest is Test {
         ppfx.liquidate(address(this), "BTC", bal / 2, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
-        assertEq(ppfx.fundingBalance(address(this)), bal / 2);
+        assertEq(ppfx.userFundingBalance(address(this)), bal / 2);
     }
 
     function test_SuccessAddCollateral() public {
@@ -485,7 +536,7 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(2);
+        vm.warp(block.timestamp + 2);
         ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
     }
@@ -497,10 +548,10 @@ contract PPFXTest is Test {
 
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(2);
+        vm.warp(block.timestamp + 2);
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
-        vm.roll(6);
+        vm.warp(block.timestamp + 4);
         ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT 
 pragma solidity ^0.8.20;
 
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -8,9 +9,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPPFX} from "./IPPFX.sol";
 
-contract PPFX is IPPFX, Context, ReentrancyGuard {
 
-    uint256 constant public MAX_UINT256 = 2**256 - 1;
+contract PPFX is IPPFX, Context, ReentrancyGuard {
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
     bytes4 constant public REDUCE_POSITION_SELECTOR = 0x292bd94c; // bytes4(keccak256("reducePosition(address,string,uint256,uint256,bool,uint256)"))
@@ -23,19 +24,15 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
     bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
 
-    error FunctionSelectorNotFound(bytes4 methodID);
-
     using Math for uint256;
     using SafeERC20 for IERC20;
 
     address public treasury;
     address public admin;
     address public insurance;
-
+    
     address private pendingAdmin;
-
-    mapping(address => bool) public operators;
-    address[] public operatorList;
+    EnumerableSet.AddressSet private operators;
 
     IERC20 public usdt;
 
@@ -67,7 +64,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @dev Throws if called by any accoutn other than the Operator
      */
     modifier onlyOperator {
-        require(operators[_msgSender()], "Caller not operator");
+        require(operators.contains(_msgSender()), "Caller not operator");
         _;
     }
 
@@ -131,14 +128,14 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @dev Get all operator address.
      */
     function getAllOperators() external view returns (address[] memory) {
-        return operatorList;
+        return operators.values();
     }
 
     /**
      * @dev Check if target address is operator.
      */
     function isOperator(address target) external view returns (bool) {
-        return operators[target];
+        return operators.contains(target);
     }
 
     /**
@@ -166,8 +163,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
-        lastWithdrawalBlock[_msgSender()] = block.number;
-        emit UserWithdrawal(_msgSender(), amount, block.number + withdrawalWaitTime);
+        lastWithdrawalBlock[_msgSender()] = block.timestamp;
+        emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
     }
 
     /**
@@ -180,11 +177,11 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function claimPendingWithdrawal() external nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        require(block.timestamp >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
         usdt.safeTransfer(_msgSender(), pendingBal);
         pendingWithdrawalBalance[_msgSender()] = 0;
         lastWithdrawalBlock[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.number);
+        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
     }
 
     /****************************
@@ -239,7 +236,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @param isProfit Profit or Loss. 
      * @param fee USDT Fee for closing position.
      *
-     * Emits a {PositionClosed} event, trading balance of `marketName` set to 0,
+     * Emits a {PositionReduced} event, trading balance of `marketName` set to 0,
      * transfer `trading balance - fee` to funding balance,
      * transfer `fee` from contract to treasury account. 
      *
@@ -399,12 +396,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", methodID));
+                emit BulkProcessFailedTxSelectorNotFound(i, methodID);
                 continue;
             }
             (bool success, bytes memory data) = address(this).delegatecall(sig);
             if (!success) {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function reverted:", data));
+                emit BulkProcessFailedTxReverted(i, data);
             }
         }
     }
@@ -465,7 +462,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      */
     function addOperator(address operatorAddr) external onlyAdmin {
         require(operatorAddr != address(0), "Operator address can not be zero");
-        require(!operators[operatorAddr], "Operator already exists");
+        require(!operators.contains(operatorAddr), "Operator already exists");
         _addOperator(operatorAddr);
     }
 
@@ -481,7 +478,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      */
     function removeOperator(address operatorAddr) external onlyAdmin {
         require(operatorAddr != address(0), "Operator address can not be zero");
-        require(operators[operatorAddr], "Operator does not exists");
+        require(operators.contains(operatorAddr), "Operator does not exists");
         _removeOperator(operatorAddr);
     }
 
@@ -492,7 +489,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      *
      */
     function removeAllOperator() external onlyAdmin {
-        require(operatorList.length > 0, "No operator found");
+        require(operators.length() > 0, "No operator found");
         _removeAllOperator();
     }
 
@@ -526,16 +523,16 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     /**
      * @dev Update withdrawal wait time.
-     * @param newBlockTime The new withdrawal wait time.
+     * @param newWaitTime The new withdrawal wait time.
      *
      * Emits a {NewWithdrawalWaitTime} event.
      *
      * Requirements:
-     * - `newBlockTime` cannot be zero.
+     * - `newWaitTime` cannot be zero.
      */
-    function updateWithdrawalWaitTime(uint256 newBlockTime) external onlyAdmin {
-        require(newBlockTime > 0, "Invalid new block time");
-        _updateWithdrawalWaitTime(newBlockTime);
+    function updateWithdrawalWaitTime(uint256 newWaitTime) external onlyAdmin {
+        require(newWaitTime > 0, "Invalid new wait time");
+        _updateWithdrawalWaitTime(newWaitTime);
     }
 
     /**
@@ -549,7 +546,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      */
     function updateMinimumOrderAmount(uint256 newMinOrderAmt) external onlyAdmin {
         require(newMinOrderAmt > 0, "Invalid new minimum order amount");
-        _updateMinimumOrderAmount(newMinOrderAmt);(newBlockTime);
+        _updateMinimumOrderAmount(newMinOrderAmt);
     }
 
     /****************************
@@ -562,7 +559,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function _tradingBalance(address user) internal view returns (uint256) {
         uint256 balSum = 0;
-        for (uint i = 0; i < availableMarkets.length; i++) {
+        uint marketsLen = availableMarkets.length;
+        for (uint i = 0; i < marketsLen; i++) {
             balSum += userTradingBalance[user][availableMarkets[i]];
         }
         return balSum;
@@ -570,6 +568,9 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function _deductUserTradingBalance(address user, bytes32 market, uint256 amount) internal {
         userTradingBalance[user][market] -= amount;
+    }
+
+    function _deductTotalTradingBalance(bytes32 market, uint256 amount) internal {
         totalTradingBalance -= amount;
         marketTotalTradingBalance[market] -= amount;
     }
@@ -589,7 +590,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 // Subtracting `amount` from pending withdrawal balance and
                 // reset the withdrawal countdown
                 pendingWithdrawalBalance[user] -= amount;
-                lastWithdrawalBlock[user] = block.number;
+                lastWithdrawalBlock[user] = block.timestamp;
             } else { // `amount` is >= pending withdrawal balance
                 // Clear pending withdrawal balance
                 uint256 remaining = amount - pendingWithdrawalBalance[user];
@@ -630,44 +631,33 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
-        if (isProfit == true) {
+        if (isProfit) {
             // Solvency check
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
             _deductUserTradingBalance(user, market, total);
+            _deductTotalTradingBalance(market, total + uPNL);
+
             userFundingBalance[user] += amount + uPNL;
         } else {
             require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
 
             _deductUserTradingBalance(user, market, total);
+            _deductTotalTradingBalance(market, total - uPNL);
+
             userFundingBalance[user] += amount - uPNL;
         }
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
 
-    // TODO: refactor to call _reducePosition?
     function _closePosition(address user, string memory marketName, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay fee and close position");
-        uint256 amount = userTradingBalance[user][market] - fee;
-
-        if (isProfit == true) {
-            // Solvency check
-            require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
-
-            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += amount + uPNL;
-        } else {
-            require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
-
-            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += amount - uPNL;
-        }
-
-        usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, amount, fee);
+        // Make sure its able to subtract fee with user trading balance
+        // _reducePosition() will do other checks
+        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to close position");
+        _reducePosition(user, marketName, userTradingBalance[user][market] - fee, uPNL, isProfit, fee);
     }
 
     function _cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) internal {
@@ -678,6 +668,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         userFundingBalance[user] += total;
         _deductUserTradingBalance(user, market, total);
+        _deductTotalTradingBalance(market, total);
         
         emit OrderCancelled(user, marketName, amount, fee);
     }
@@ -687,6 +678,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= amount + fee, "Insufficient trading balance to liquidate");
         _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
+        _deductTotalTradingBalance(market, amount + fee);
         userFundingBalance[user] += amount;
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
@@ -697,6 +689,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
         _deductUserTradingBalance(user, market, fee);
+        _deductTotalTradingBalance(market, fee);
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
     }
@@ -707,6 +700,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         if (isAdd) {
             require(availableFundingFee >= amount, "Insufficient collected funding fee to add funding fee");
+            _deductTotalTradingBalance(market, amount);
             userFundingBalance[user] += amount;
             availableFundingFee -= amount;
         } else {
@@ -732,6 +726,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to reduce collateral");
         _deductUserTradingBalance(user, market, amount);
+        _deductTotalTradingBalance(market, amount);
         userFundingBalance[user] += amount;
         emit CollateralDeducted(user, marketName, amount);
     }
@@ -760,43 +755,22 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     }
 
     function _removeAllOperator() internal {
-        uint operatorListLen = operatorList.length;
-        for (uint i = 0; i < operatorListLen; i++) {
-            operators[operatorList[i]] = false;
-            emit OperatorRemoved(operatorList[i]);
+        address[] memory operatorList = operators.values();
+        uint operatorLen = operatorList.length;
+        for (uint i = 0; i < operatorLen; i++) {
+            address operatorToBeRemoved = operatorList[i];
+            operators.remove(operatorToBeRemoved);
+            emit OperatorRemoved(operatorToBeRemoved);
         }
-
-        delete operatorList;
     }
 
     function _removeOperator(address operatorAddr) internal {
-        if (operatorList[operatorList.length - 1] == operatorAddr) {
-            operators[operatorAddr] = false;
-            operatorList.pop();
-            emit OperatorRemoved(operatorAddr);
-            return;
-        }
-
-        bool found = false;
-        for (uint i = 0; i < operatorList.length - 1; i++) {
-            if (operatorList[i] == operatorAddr) {
-                found = true;
-            }
-            if (found) {
-                operatorList[i] = operatorList[i + 1];
-            }
-        }
-
-        require(found, "Target operator address not found");
-
-        operators[operatorAddr] = false;
-        operatorList.pop();
+        operators.remove(operatorAddr);
         emit OperatorRemoved(operatorAddr);
     }
 
     function _addOperator(address operatorAddr) internal {
-        operators[operatorAddr] = true;
-        operatorList.push(operatorAddr);
+        operators.add(operatorAddr);
         emit NewOperator(operatorAddr);
     }
 
