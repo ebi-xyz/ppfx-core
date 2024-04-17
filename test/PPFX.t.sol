@@ -27,7 +27,8 @@ contract PPFXTest is Test {
             treasury,
             insurance,
             IERC20(address(usdt)),
-            5
+            5,
+            1
         );
     }
 
@@ -97,7 +98,7 @@ contract PPFXTest is Test {
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         ppfx.addPosition(address(this), "BTC", 1 ether - 1, 1);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0);
-        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.userFundingBalance(address(this)), 0);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -108,7 +109,7 @@ contract PPFXTest is Test {
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
         ppfx.addPosition(address(this), "BTC", 0.8 ether - 1, 1);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0);
-        assertEq(ppfx.fundingBalance(address(this)), 0.2 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 0.2 ether);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -118,7 +119,7 @@ contract PPFXTest is Test {
         ppfx.withdraw(0.5 ether);
         ppfx.addPosition(address(this), "BTC", 0.4 ether - 1, 1);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
-        assertEq(ppfx.fundingBalance(address(this)), 0.1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 0.1 ether);
         assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
     }
 
@@ -127,7 +128,7 @@ contract PPFXTest is Test {
         test_AddMarket();
         ppfx.addPosition(address(this), "BTC", 1 ether - 1, 1);
 
-        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.userFundingBalance(address(this)), 0);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -139,7 +140,7 @@ contract PPFXTest is Test {
         ppfx.deposit(1 ether);
         vm.stopPrank();
 
-        if (!ppfx.marketExists(keccak256(abi.encode("BTC")))) {
+        if (!ppfx.marketExists(keccak256(bytes("BTC")))) {
             test_AddMarket();
         }
         
@@ -152,7 +153,7 @@ contract PPFXTest is Test {
         ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 0, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 1);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 1);
         assertEq(ppfx.totalBalance(address(this)), 1 ether - 1);
     }
 
@@ -168,11 +169,11 @@ contract PPFXTest is Test {
         ppfx.reducePosition(address(this), "BTC", 1 ether - 1, 1 ether, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 2 ether - 1);
+        assertEq(ppfx.userFundingBalance(address(this)), 2 ether - 1);
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
         
         // Bob Liquidate entire position 
-        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+        ppfx.liquidate(address(1), "BTC", 0, 1);
 
         // Bob should have no balance left
         assertEq(ppfx.totalBalance(address(1)), 0);
@@ -190,11 +191,11 @@ contract PPFXTest is Test {
         ppfx.reducePosition(address(this), "BTC", 0, 1 ether, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
 
         // Bob Liquidate entire position 
-        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+        ppfx.liquidate(address(1), "BTC", 0, 1);
 
         // Bob should have no balance left
         assertEq(ppfx.totalBalance(address(1)), 0);
@@ -212,11 +213,11 @@ contract PPFXTest is Test {
         ppfx.reducePosition(address(this), "BTC", 0.5 ether, 1 ether, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 1.5 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1.5 ether);
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
 
         // Bob Liquidate entire position 
-        ppfx.liquidate(address(1), "BTC", 1 ether - 1, 1);
+        ppfx.liquidate(address(1), "BTC", 0, 1);
 
         // Bob should have no balance left
         assertEq(ppfx.totalBalance(address(1)), 0);
@@ -234,7 +235,7 @@ contract PPFXTest is Test {
         ppfx.reducePosition(address(this), "BTC", 0.5 ether, 0.5 ether, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
         assertEq(ppfx.totalBalance(address(this)), 1.5 ether - 1);
 
         // Bob lose half of his position
@@ -252,7 +253,7 @@ contract PPFXTest is Test {
         ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 1);
+        assertEq(ppfx.userFundingBalance(address(this)), 1);
         assertEq(ppfx.totalBalance(address(this)), 1 ether - 1);
     }
 
@@ -267,7 +268,7 @@ contract PPFXTest is Test {
         ppfx.closePosition(address(this), "BTC", 1 ether - 1, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.userFundingBalance(address(this)), 0);
         assertEq(ppfx.totalBalance(address(this)), 0);
     }
 
@@ -282,12 +283,12 @@ contract PPFXTest is Test {
         ppfx.closePosition(address(this), "BTC", 0.5 ether - 1, false, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 0.5 ether);
         assertEq(ppfx.totalBalance(address(this)), 0.5 ether);
 
         // Bob close position with 50% winning
         ppfx.closePosition(address(1), "BTC", 0.5 ether, true, 0);
-        assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 0.5 ether);
         assertEq(ppfx.totalBalance(address(1)), 1.5 ether);
     }
 
@@ -298,7 +299,7 @@ contract PPFXTest is Test {
         ppfx.fillOrder(address(this), "BTC", 1 gwei);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1 gwei);
-        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.userFundingBalance(address(this)), 0);
         assertEq(ppfx.totalBalance(address(this)), 1 ether - 1 gwei);
     }
 
@@ -317,7 +318,7 @@ contract PPFXTest is Test {
 
         ppfx.cancelOrder(address(this), "BTC", 1 ether - 1, 1);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -326,7 +327,7 @@ contract PPFXTest is Test {
 
         ppfx.cancelOrder(address(this), "BTC", 1 ether / 2, 1);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether / 2 + 1);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether / 2 + 1);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -338,7 +339,7 @@ contract PPFXTest is Test {
         // Then Add funding fee
         ppfx.settleFundingFee(address(this), "BTC", 0.5 ether, true);
 
-        assertEq(ppfx.fundingBalance(address(this)), 0.5 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 0.5 ether);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -347,17 +348,17 @@ contract PPFXTest is Test {
 
         ppfx.settleFundingFee(address(this), "BTC", 1 ether, false);
 
-        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.userFundingBalance(address(this)), 0);
         assertEq(ppfx.totalBalance(address(this)), 0);
     }
 
     function test_SuccessLiquidateEntireBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.liquidate(address(this), "BTC", ppfx.getTradingBalanceForMarket(address(this), "BTC") - 1 gwei, 1 gwei);
+        ppfx.liquidate(address(this), "BTC", 1 gwei, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
-        assertEq(ppfx.totalBalance(address(this)), 0);
+        assertEq(ppfx.totalBalance(address(this)), 1 gwei);
     }
 
     function test_SuccessLiquidateHalfBalance() public {
@@ -366,7 +367,7 @@ contract PPFXTest is Test {
         ppfx.liquidate(address(this), "BTC", bal / 2, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
-        assertEq(ppfx.fundingBalance(address(this)), bal / 2 - 1 gwei);
+        assertEq(ppfx.fundingBalance(address(this)), bal / 2);
     }
 
     function test_SuccessAddCollateral() public {
@@ -374,11 +375,11 @@ contract PPFXTest is Test {
         
         usdt.approve(address(ppfx), 1 ether);
         ppfx.deposit(1 ether);
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
 
         ppfx.addCollateral(address(this), "BTC", 1 ether);
 
-        assertEq(ppfx.fundingBalance(address(this)), 0);
+        assertEq(ppfx.userFundingBalance(address(this)), 0);
         assertEq(ppfx.totalBalance(address(this)), 2 ether);
     }
 
@@ -387,7 +388,7 @@ contract PPFXTest is Test {
 
         ppfx.reduceCollateral(address(this), "BTC", 1 ether);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -405,7 +406,7 @@ contract PPFXTest is Test {
 
         ppfx.bulkProcessFunctions(bs);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 20 gwei);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 20 gwei);
     }
 
     function test_SuccessSingleBulkPositionUpdates() public {
@@ -419,7 +420,7 @@ contract PPFXTest is Test {
 
         ppfx.bulkProcessFunctions(bs);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 1 gwei);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 1 gwei);
     }
 
     function test_SuccessBulkPositionUpdatesPartiallyFailed() public {
@@ -436,7 +437,7 @@ contract PPFXTest is Test {
 
         ppfx.bulkProcessFunctions(bs);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether - 10 gwei);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 10 gwei);
     }
 
     function test_SuccessEmptyBulkPositionUpdates() public {
@@ -447,7 +448,7 @@ contract PPFXTest is Test {
 
         ppfx.bulkProcessFunctions(bs);
 
-        assertEq(ppfx.fundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
     }
 
     function testFail_DepositZero() public {

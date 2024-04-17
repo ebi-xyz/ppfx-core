@@ -5,9 +5,10 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPPFX} from "./IPPFX.sol";
 
-contract PPFX is IPPFX, Context {
+contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     uint256 constant public MAX_UINT256 = 2**256 - 1;
 
@@ -38,6 +39,7 @@ contract PPFX is IPPFX, Context {
 
     IERC20 public usdt;
 
+    uint256 public minimumOrderAmount;
     uint256 public withdrawalWaitTime;
     uint256 public totalTradingBalance;
 
@@ -77,7 +79,8 @@ contract PPFX is IPPFX, Context {
         address _treasury, 
         address _insurance, 
         IERC20 usdtAddress,
-        uint256 _withdrawalWaitTime
+        uint256 _withdrawalWaitTime,
+        uint256 _minimumOrderAmount
     ) {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
@@ -85,14 +88,7 @@ contract PPFX is IPPFX, Context {
         _addOperator(_msgSender());
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
-    }
-
-    /**
-     * @dev Get target address funding balance.
-     * @return Target's funding balance.
-     */
-    function fundingBalance(address target) external view returns (uint256) {
-        return _fundingBalance(target);
+        _updateMinimumOrderAmount(_minimumOrderAmount);
     }
 
     /**
@@ -114,7 +110,7 @@ contract PPFX is IPPFX, Context {
      * @dev Get total balance across trading and funding balance.
      */
     function totalBalance(address target) external view returns (uint256) {
-        return _fundingBalance(target) + _tradingBalance(target);
+        return userFundingBalance[target] + _tradingBalance(target);
     }
 
     /**
@@ -151,9 +147,8 @@ contract PPFX is IPPFX, Context {
      * 
      * Emits a {UserDeposit} event.
      */
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "Invalid amount");
-        require(usdt.allowance(_msgSender(), address(this)) >= amount, "Insufficient allowance");
         usdt.safeTransferFrom(_msgSender(), address(this), amount);
         userFundingBalance[_msgSender()] += amount;
         emit UserDeposit(_msgSender(), amount);
@@ -168,7 +163,7 @@ contract PPFX is IPPFX, Context {
      */
     function withdraw(uint256 amount) external {
         require(amount > 0, "Invalid amount");
-        require(_fundingBalance(_msgSender()) >= amount, "Insufficient balance from funding account");
+        require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
         lastWithdrawalBlock[_msgSender()] = block.number;
@@ -182,14 +177,14 @@ contract PPFX is IPPFX, Context {
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawal() external {
-        require(pendingWithdrawalBalance[_msgSender()] > 0, "Insufficient pending withdrawal balance");
+    function claimPendingWithdrawal() external nonReentrant {
+        uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
+        require(pendingBal > 0, "Insufficient pending withdrawal balance");
         require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
-        usdt.safeTransfer(_msgSender(), pendingWithdrawalBalance[_msgSender()]);
-        uint256 withdrew = pendingWithdrawalBalance[_msgSender()];
+        usdt.safeTransfer(_msgSender(), pendingBal);
         pendingWithdrawalBalance[_msgSender()] = 0;
         lastWithdrawalBlock[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), withdrew, block.number);
+        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.number);
     }
 
     /****************************
@@ -380,30 +375,31 @@ contract PPFX is IPPFX, Context {
      *
      */
     function bulkProcessFunctions(
-        BulkStruct[] memory bulkStructs
+        BulkStruct[] calldata bulkStructs
     ) external onlyOperator {
         for (uint256 i = 0; i < bulkStructs.length; i++) {
             bytes memory sig;
-            if (bulkStructs[i].methodID == ADD_POSITION_SELECTOR) {
+            bytes4 methodID = bulkStructs[i].methodID;
+            if (methodID == ADD_POSITION_SELECTOR) {
                 sig = abi.encodeWithSelector(ADD_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == REDUCE_POSITION_SELECTOR) {
+            } else if (methodID == REDUCE_POSITION_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == CLOSE_POSITION_SELECTOR) {
+            } else if (methodID == CLOSE_POSITION_SELECTOR) {
                 sig = abi.encodeWithSelector(CLOSE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == CANCEL_ORDER_SELECTOR) {
+            } else if (methodID == CANCEL_ORDER_SELECTOR) {
                 sig = abi.encodeWithSelector(CANCEL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == LIQUIDATE_SELECTOR) {
+            } else if (methodID == LIQUIDATE_SELECTOR) {
                 sig = abi.encodeWithSelector(LIQUIDATE_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (bulkStructs[i].methodID == FILL_ORDER_SELECTOR) {
+            } else if (methodID == FILL_ORDER_SELECTOR) {
                 sig = abi.encodeWithSelector(FILL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (bulkStructs[i].methodID == SETTLE_FUNDING_SELECTOR) {
+            } else if (methodID == SETTLE_FUNDING_SELECTOR) {
                 sig = abi.encodeWithSelector(SETTLE_FUNDING_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
-            } else if (bulkStructs[i].methodID == ADD_COLLATERAL_SELECTOR) {
+            } else if (methodID == ADD_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(ADD_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (bulkStructs[i].methodID == REDUCE_COLLATERAL_SELECTOR) {
+            } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", bulkStructs[i].methodID));
+                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", methodID));
                 continue;
             }
             (bool success, bytes memory data) = address(this).delegatecall(sig);
@@ -542,12 +538,26 @@ contract PPFX is IPPFX, Context {
         _updateWithdrawalWaitTime(newBlockTime);
     }
 
+    /**
+     * @dev Update minimum order amount.
+     * @param newMinOrderAmt The new minimum order amount.
+     *
+     * Emits a {NewMinimumOrderAmount} event.
+     *
+     * Requirements:
+     * - `newMinOrderAmt` cannot be zero.
+     */
+    function updateMinimumOrderAmount(uint256 newMinOrderAmt) external onlyAdmin {
+        require(newMinOrderAmt > 0, "Invalid new minimum order amount");
+        _updateMinimumOrderAmount(newMinOrderAmt);(newBlockTime);
+    }
+
     /****************************
      * Internal functions *
      ****************************/
 
     function _marketHash(string memory marketName) internal pure returns (bytes32) {
-        return keccak256(abi.encode(marketName));
+        return keccak256(bytes(marketName));
     }
 
     function _tradingBalance(address user) internal view returns (uint256) {
@@ -556,10 +566,6 @@ contract PPFX is IPPFX, Context {
             balSum += userTradingBalance[user][availableMarkets[i]];
         }
         return balSum;
-    }
-
-    function _fundingBalance(address user) internal view returns (uint256) {
-        return userFundingBalance[user];
     }
 
     function _deductUserTradingBalance(address user, bytes32 market, uint256 amount) internal {
@@ -607,8 +613,9 @@ contract PPFX is IPPFX, Context {
     function _addPosition(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
+        require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
         uint256 total = amount + fee;
-        require(_fundingBalance(user) + pendingWithdrawalBalance[user] >= total, "Insufficient funding balance to add position");
+        require(userFundingBalance[user] + pendingWithdrawalBalance[user] >= total, "Insufficient funding balance to add position");
 
         _deductUserFundingBalance(user, total);
         _addUserTradingBalance(user, market, total);
@@ -619,6 +626,7 @@ contract PPFX is IPPFX, Context {
     function _reducePosition(address user, string memory marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
+        require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
         uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
@@ -634,7 +642,6 @@ contract PPFX is IPPFX, Context {
             _deductUserTradingBalance(user, market, total);
             userFundingBalance[user] += amount - uPNL;
         }
-        require(usdt.balanceOf(address(this)) >= fee, "Reduce Position: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
@@ -659,7 +666,6 @@ contract PPFX is IPPFX, Context {
             userFundingBalance[user] += amount - uPNL;
         }
 
-        require(usdt.balanceOf(address(this)) >= fee, "Close Position: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit PositionReduced(user, marketName, amount, fee);
     }
@@ -679,9 +685,9 @@ contract PPFX is IPPFX, Context {
     function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
+        require(userTradingBalance[user][market] >= amount + fee, "Insufficient trading balance to liquidate");
         _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
         userFundingBalance[user] += amount;
-        require(usdt.balanceOf(address(this)) >= fee, "Liquidate: Insufficient usdt balance to transfer fee to insurance");
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
     }
@@ -691,7 +697,6 @@ contract PPFX is IPPFX, Context {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
         _deductUserTradingBalance(user, market, fee);
-        require(usdt.balanceOf(address(this)) >= fee, "FillOrder: Insufficient usdt balance to transfer fee to treasury");
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
     }
@@ -716,7 +721,7 @@ contract PPFX is IPPFX, Context {
     function _addCollateral(address user, string memory marketName, uint256 amount) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(_fundingBalance(user) + pendingWithdrawalBalance[user] >= amount, "Insufficient funding balance to add collateral");
+        require(userFundingBalance[user] + pendingWithdrawalBalance[user] >= amount, "Insufficient funding balance to add collateral");
         _deductUserFundingBalance(user, amount);
         _addUserTradingBalance(user, market, amount);
         emit CollateralAdded(user, marketName, amount);
@@ -757,7 +762,8 @@ contract PPFX is IPPFX, Context {
     }
 
     function _removeAllOperator() internal {
-        for (uint i = 0; i < operatorList.length; i++) {
+        uint operatorListLen = operatorList.length;
+        for (uint i = 0; i < operatorListLen; i++) {
             operators[operatorList[i]] = false;
             emit OperatorRemoved(operatorList[i]);
         }
@@ -809,6 +815,11 @@ contract PPFX is IPPFX, Context {
     function _updateWithdrawalWaitTime(uint256 newBlockTime) internal {
         withdrawalWaitTime = newBlockTime;
         emit NewWithdrawalWaitTime(newBlockTime);
+    }
+
+    function _updateMinimumOrderAmount(uint256 newMinOrderAmt) internal {
+        minimumOrderAmount = newMinOrderAmt;
+        emit NewMinimumOrderAmount(newMinOrderAmt);
     }
     
 }
