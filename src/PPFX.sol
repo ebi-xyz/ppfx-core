@@ -415,10 +415,10 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      *     
      */
      function acceptAdmin() external {
-        require(_msgSender() == pendingAdmin, "Caller not pendingAdmin");
         require(pendingAdmin != address(0));
+        require(_msgSender() == pendingAdmin, "Caller not pendingAdmin");
         _updateAdmin(pendingAdmin);
-        pendingAdmin == address(0);
+        pendingAdmin = address(0);
      }
 
 
@@ -435,7 +435,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `adminAddr` cannot be the zero address.
      */
     function transferAdmin(address adminAddr) external onlyAdmin() {
-        require(adminAddr != address(0), "Admin address can not be zero");
         _transferAdmin(adminAddr);
     }
 
