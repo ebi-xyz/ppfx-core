@@ -541,6 +541,9 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function _deductUserTradingBalance(address user, bytes32 market, uint256 amount) internal {
         userTradingBalance[user][market] -= amount;
+    }
+
+    function _deductTotalTradingBalance(bytes32 market, uint256 amount) internal {
         totalTradingBalance -= amount;
         marketTotalTradingBalance[market] -= amount;
     }
@@ -606,11 +609,15 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
             _deductUserTradingBalance(user, market, total);
+            _deductTotalTradingBalance(market, total + uPNL);
+
             userFundingBalance[user] += amount + uPNL;
         } else {
             require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
 
             _deductUserTradingBalance(user, market, total);
+            _deductTotalTradingBalance(market, total - uPNL);
+
             userFundingBalance[user] += amount - uPNL;
         }
         usdt.safeTransfer(treasury, fee);
@@ -634,6 +641,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         userFundingBalance[user] += total;
         _deductUserTradingBalance(user, market, total);
+        _deductTotalTradingBalance(market, total);
         
         emit OrderCancelled(user, marketName, amount, fee);
     }
@@ -643,6 +651,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= amount + fee, "Insufficient trading balance to liquidate");
         _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
+        _deductTotalTradingBalance(market, amount + fee);
         userFundingBalance[user] += amount;
         usdt.safeTransfer(insurance, fee);
         emit Liquidated(user, marketName, amount, fee);
@@ -653,6 +662,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
         _deductUserTradingBalance(user, market, fee);
+        _deductTotalTradingBalance(market, fee);
         usdt.safeTransfer(treasury, fee);
         emit OrderFilled(user, marketName, fee);
     }
@@ -663,6 +673,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         if (isAdd) {
             require(availableFundingFee >= amount, "Insufficient collected funding fee to add funding fee");
+            _deductTotalTradingBalance(market, amount);
             userFundingBalance[user] += amount;
             availableFundingFee -= amount;
         } else {
@@ -688,6 +699,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to reduce collateral");
         _deductUserTradingBalance(user, market, amount);
+        _deductTotalTradingBalance(market, amount);
         userFundingBalance[user] += amount;
         emit CollateralDeducted(user, marketName, amount);
     }
