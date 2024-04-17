@@ -237,7 +237,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @param isProfit Profit or Loss. 
      * @param fee USDT Fee for closing position.
      *
-     * Emits a {PositionClosed} event, trading balance of `marketName` set to 0,
+     * Emits a {PositionReduced} event, trading balance of `marketName` set to 0,
      * transfer `trading balance - fee` to funding balance,
      * transfer `fee` from contract to treasury account. 
      *
@@ -625,33 +625,13 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit PositionReduced(user, marketName, amount, fee);
     }
 
-    // TODO: refactor to call _reducePosition?
     function _closePosition(address user, string memory marketName, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        uint256 userTradingBal = userTradingBalance[user][market];
-        require(userTradingBal >= fee, "Insufficient trading balance to pay fee and close position");
-        uint256 amount = userTradingBal - fee;
-
-        if (isProfit == true) {
-            // Solvency check
-            require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
-
-            _deductUserTradingBalance(user, market, userTradingBal);
-            _deductTotalTradingBalance(market, userTradingBal + uPNL);
-
-            userFundingBalance[user] += amount + uPNL;
-        } else {
-            require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
-
-            _deductUserTradingBalance(user, market, userTradingBal);
-            _deductTotalTradingBalance(market, userTradingBal - uPNL);
-            
-            userFundingBalance[user] += amount - uPNL;
-        }
-
-        usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, amount, fee);
+        // Make sure its able to subtract fee with user trading balance
+        // _reducePosition() will do other checks
+        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to close position");
+        _reducePosition(user, marketName, userTradingBalance[user][market] - fee, uPNL, isProfit, fee);
     }
 
     function _cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) internal {
