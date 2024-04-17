@@ -51,6 +51,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     mapping(bytes32 => bool) public marketExists;
     bytes32[] public availableMarkets;
 
+    mapping(bytes4 => bool) public availableFunctionSelector;
+
     /**
      * @dev Throws if called by any accoutn other than the Admin
      */
@@ -85,6 +87,16 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
         _updateMinimumOrderAmount(_minimumOrderAmount);
+
+        availableFunctionSelector[ADD_POSITION_SELECTOR] = true;
+        availableFunctionSelector[REDUCE_POSITION_SELECTOR] = true;
+        availableFunctionSelector[CLOSE_POSITION_SELECTOR] = true;
+        availableFunctionSelector[CANCEL_ORDER_SELECTOR] = true;
+        availableFunctionSelector[LIQUIDATE_SELECTOR] = true;
+        availableFunctionSelector[FILL_ORDER_SELECTOR] = true;
+        availableFunctionSelector[SETTLE_FUNDING_SELECTOR] = true;
+        availableFunctionSelector[ADD_COLLATERAL_SELECTOR] = true;
+        availableFunctionSelector[REDUCE_COLLATERAL_SELECTOR] = true;
     }
 
     /**
@@ -367,38 +379,20 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     /**
      * @dev Bulk Process multiple function calls
      *
-     * @param bulkStructs List of BulkStruct to execute
+     * @param signatures List of encoded selector & args to execute
      *
      */
     function bulkProcessFunctions(
-        BulkStruct[] calldata bulkStructs
+        bytes[] calldata signatures
     ) external onlyOperator {
-        for (uint256 i = 0; i < bulkStructs.length; i++) {
-            bytes memory sig;
-            bytes4 methodID = bulkStructs[i].methodID;
-            if (methodID == ADD_POSITION_SELECTOR) {
-                sig = abi.encodeWithSelector(ADD_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (methodID == REDUCE_POSITION_SELECTOR) {
-                sig = abi.encodeWithSelector(REDUCE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (methodID == CLOSE_POSITION_SELECTOR) {
-                sig = abi.encodeWithSelector(CLOSE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (methodID == CANCEL_ORDER_SELECTOR) {
-                sig = abi.encodeWithSelector(CANCEL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (methodID == LIQUIDATE_SELECTOR) {
-                sig = abi.encodeWithSelector(LIQUIDATE_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (methodID == FILL_ORDER_SELECTOR) {
-                sig = abi.encodeWithSelector(FILL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (methodID == SETTLE_FUNDING_SELECTOR) {
-                sig = abi.encodeWithSelector(SETTLE_FUNDING_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
-            } else if (methodID == ADD_COLLATERAL_SELECTOR) {
-                sig = abi.encodeWithSelector(ADD_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
-                sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else {
-                emit BulkProcessFailedTxSelectorNotFound(i, methodID);
+        uint256 sigLen = signatures.length;
+        for (uint256 i = 0; i < sigLen; i++) {
+            bytes4 selector = bytes4(signatures[i][:4]);
+            if (!availableFunctionSelector[selector]) {
+                emit BulkProcessFailedTxSelectorNotFound(i, selector);
                 continue;
             }
-            (bool success, bytes memory data) = address(this).delegatecall(sig);
+            (bool success, bytes memory data) = address(this).delegatecall(signatures[i]);
             if (!success) {
                 emit BulkProcessFailedTxReverted(i, data);
             }
