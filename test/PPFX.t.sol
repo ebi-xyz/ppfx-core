@@ -47,7 +47,7 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(6);
+        vm.warp(block.timestamp + 5);
         uint256 oldBalance = usdt.balanceOf(address(this));
         ppfx.claimPendingWithdrawal();
         assertEq(usdt.balanceOf(address(this)), oldBalance + 1 ether);
@@ -60,10 +60,10 @@ contract PPFXTest is Test {
 
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(2);
+        vm.warp(block.timestamp + 2);
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
-        vm.roll(7);
+        vm.warp(block.timestamp + 7);
         uint256 oldBalance = usdt.balanceOf(address(this));
         ppfx.claimPendingWithdrawal();
         assertEq(usdt.balanceOf(address(this)), oldBalance + 2 ether);
@@ -198,10 +198,10 @@ contract PPFXTest is Test {
         uint256 oldTreasuryBalance = usdt.balanceOf(treasury);
         // Alice Reduce Position, Getting 1,000,000,000,000 USDT Profit
         // With no reduce in her position
-        ppfx.reducePosition(address(this), "BTC", 0, 1 ether, true, 1);
+        ppfx.reducePosition(address(this), "BTC", 1, 1 ether, true, 1);
 
         assertEq(usdt.balanceOf(treasury), oldTreasuryBalance + 1);
-        assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether + 1);
         assertEq(ppfx.totalBalance(address(this)), 2 ether - 1);
 
         // Bob Liquidate entire position 
@@ -377,7 +377,7 @@ contract PPFXTest is Test {
         ppfx.liquidate(address(this), "BTC", bal / 2, 1 gwei);
 
         assertEq(usdt.balanceOf(insurance), 1 gwei);
-        assertEq(ppfx.fundingBalance(address(this)), bal / 2);
+        assertEq(ppfx.userFundingBalance(address(this)), bal / 2);
     }
 
     function test_SuccessAddCollateral() public {
@@ -495,7 +495,7 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(2);
+        vm.warp(block.timestamp + 2);
         ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
     }
@@ -507,10 +507,10 @@ contract PPFXTest is Test {
 
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        vm.roll(2);
+        vm.warp(block.timestamp + 2);
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
-        vm.roll(6);
+        vm.warp(block.timestamp + 4);
         ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
     }

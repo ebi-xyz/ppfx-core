@@ -13,8 +13,6 @@ import {IPPFX} from "./IPPFX.sol";
 contract PPFX is IPPFX, Context, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    uint256 constant public MAX_UINT256 = 2**256 - 1;
-
     bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
     bytes4 constant public REDUCE_POSITION_SELECTOR = 0x292bd94c; // bytes4(keccak256("reducePosition(address,string,uint256,uint256,bool,uint256)"))
     bytes4 constant public CLOSE_POSITION_SELECTOR = 0x29228a43; // bytes4(keccak256("closePosition(address,string,uint256,uint256)"))
@@ -25,8 +23,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x640fd4b5; // bytes4(keccak256("settleFundingFee(address,string,uint256,bool)"))
     bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
     bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
-
-    error FunctionSelectorNotFound(bytes4 methodID);
 
     using Math for uint256;
     using SafeERC20 for IERC20;
@@ -166,8 +162,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
-        lastWithdrawalBlock[_msgSender()] = block.number;
-        emit UserWithdrawal(_msgSender(), amount, block.number + withdrawalWaitTime);
+        lastWithdrawalBlock[_msgSender()] = block.timestamp;
+        emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
     }
 
     /**
@@ -180,11 +176,11 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function claimPendingWithdrawal() external nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.number >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        require(block.timestamp >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
         usdt.safeTransfer(_msgSender(), pendingBal);
         pendingWithdrawalBalance[_msgSender()] = 0;
         lastWithdrawalBlock[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.number);
+        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
     }
 
     /****************************
@@ -239,7 +235,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @param isProfit Profit or Loss. 
      * @param fee USDT Fee for closing position.
      *
-     * Emits a {PositionClosed} event, trading balance of `marketName` set to 0,
+     * Emits a {PositionReduced} event, trading balance of `marketName` set to 0,
      * transfer `trading balance - fee` to funding balance,
      * transfer `fee` from contract to treasury account. 
      *
@@ -399,12 +395,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
                 sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
             } else {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function selector not found:", methodID));
+                emit BulkProcessFailedTxSelectorNotFound(i, methodID);
                 continue;
             }
             (bool success, bytes memory data) = address(this).delegatecall(sig);
             if (!success) {
-                emit BulkProcessFailedTx(i, abi.encodePacked("function reverted:", data));
+                emit BulkProcessFailedTxReverted(i, data);
             }
         }
     }
@@ -500,16 +496,16 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     /**
      * @dev Update withdrawal wait time.
-     * @param newBlockTime The new withdrawal wait time.
+     * @param newWaitTime The new withdrawal wait time.
      *
      * Emits a {NewWithdrawalWaitTime} event.
      *
      * Requirements:
-     * - `newBlockTime` cannot be zero.
+     * - `newWaitTime` cannot be zero.
      */
-    function updateWithdrawalWaitTime(uint256 newBlockTime) external onlyAdmin {
-        require(newBlockTime > 0, "Invalid new block time");
-        _updateWithdrawalWaitTime(newBlockTime);
+    function updateWithdrawalWaitTime(uint256 newWaitTime) external onlyAdmin {
+        require(newWaitTime > 0, "Invalid new wait time");
+        _updateWithdrawalWaitTime(newWaitTime);
     }
 
     /**
@@ -523,7 +519,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      */
     function updateMinimumOrderAmount(uint256 newMinOrderAmt) external onlyAdmin {
         require(newMinOrderAmt > 0, "Invalid new minimum order amount");
-        _updateMinimumOrderAmount(newMinOrderAmt);(newBlockTime);
+        _updateMinimumOrderAmount(newMinOrderAmt);
     }
 
     /****************************
@@ -536,7 +532,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function _tradingBalance(address user) internal view returns (uint256) {
         uint256 balSum = 0;
-        for (uint i = 0; i < availableMarkets.length; i++) {
+        uint marketsLen = availableMarkets.length;
+        for (uint i = 0; i < marketsLen; i++) {
             balSum += userTradingBalance[user][availableMarkets[i]];
         }
         return balSum;
@@ -563,7 +560,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 // Subtracting `amount` from pending withdrawal balance and
                 // reset the withdrawal countdown
                 pendingWithdrawalBalance[user] -= amount;
-                lastWithdrawalBlock[user] = block.number;
+                lastWithdrawalBlock[user] = block.timestamp;
             } else { // `amount` is >= pending withdrawal balance
                 // Clear pending withdrawal balance
                 uint256 remaining = amount - pendingWithdrawalBalance[user];
@@ -604,7 +601,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         uint256 total = amount + fee;
         require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
 
-        if (isProfit == true) {
+        if (isProfit) {
             // Solvency check
             require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
@@ -620,28 +617,13 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit PositionReduced(user, marketName, amount, fee);
     }
 
-    // TODO: refactor to call _reducePosition?
     function _closePosition(address user, string memory marketName, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
-        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay fee and close position");
-        uint256 amount = userTradingBalance[user][market] - fee;
-
-        if (isProfit == true) {
-            // Solvency check
-            require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
-
-            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += amount + uPNL;
-        } else {
-            require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
-
-            _deductUserTradingBalance(user, market, userTradingBalance[user][market]);
-            userFundingBalance[user] += amount - uPNL;
-        }
-
-        usdt.safeTransfer(treasury, fee);
-        emit PositionReduced(user, marketName, amount, fee);
+        // Make sure its able to subtract fee with user trading balance
+        // _reducePosition() will do other checks
+        require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to close position");
+        _reducePosition(user, marketName, userTradingBalance[user][market] - fee, uPNL, isProfit, fee);
     }
 
     function _cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) internal {
