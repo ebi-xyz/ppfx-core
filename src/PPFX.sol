@@ -30,7 +30,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     address public treasury;
     address public admin;
     address public insurance;
-
+    
+    address private pendingAdmin;
     EnumerableSet.AddressSet private operators;
 
     IERC20 public usdt;
@@ -405,9 +406,35 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         }
     }
 
+    /**
+     * @dev Accept admin role
+     * Emits a {NewAdmin} event.
+     *     
+     */
+     function acceptAdmin() external {
+        require(pendingAdmin != address(0), "Admin address can not be zero");
+        require(_msgSender() == pendingAdmin, "Caller not pendingAdmin");
+        _updateAdmin(pendingAdmin);
+        pendingAdmin = address(0);
+     }
+
+
     /****************************
      * Admin only functions *
      ****************************/
+
+    /**
+     * @dev Update Admin account.
+     * @param adminAddr The new admin address.     
+     * Emits a {TransferAdmin} event.
+     * 
+     * Requirements:
+     * - `adminAddr` cannot be the zero address.
+     */
+    function transferAdmin(address adminAddr) external onlyAdmin() {
+        require(adminAddr != address(0), "Admin address can not be zero");
+        _transferAdmin(adminAddr);
+    }
 
     /**
      * @dev Update Treasury account.
@@ -712,8 +739,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit NewMarketAdded(market, marketName);
     }
 
+    function _transferAdmin(address adminAddr) internal {
+        pendingAdmin = adminAddr;
+        emit TransferAdmin(adminAddr);
+    }
+
     function _updateAdmin(address adminAddr) internal {
-        require(adminAddr != address(0), "Admin address can not be zero");
         admin = adminAddr;
         emit NewAdmin(adminAddr);
     }
