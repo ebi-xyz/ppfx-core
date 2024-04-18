@@ -13,17 +13,6 @@ import {IPPFX} from "./IPPFX.sol";
 contract PPFX is IPPFX, Context, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
-    bytes4 constant public REDUCE_POSITION_SELECTOR = 0x292bd94c; // bytes4(keccak256("reducePosition(address,string,uint256,uint256,bool,uint256)"))
-    bytes4 constant public CLOSE_POSITION_SELECTOR = 0x29228a43; // bytes4(keccak256("closePosition(address,string,uint256,uint256)"))
-    bytes4 constant public CANCEL_ORDER_SELECTOR = 0x17a0b3e0; // bytes4(keccak256("cancelOrder(address,string,uint256,uint256)"))
-    bytes4 constant public LIQUIDATE_SELECTOR = 0xdd5273dc; // bytes4(keccak256("liquidate(address,string,uint256,uint256)"))
-
-    bytes4 constant public FILL_ORDER_SELECTOR = 0x21c5aa45; // bytes4(keccak256("fillOrder(address,string,uint256)"))
-    bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x640fd4b5; // bytes4(keccak256("settleFundingFee(address,string,uint256,bool)"))
-    bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
-    bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
-
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -51,8 +40,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     mapping(bytes32 => bool) public marketExists;
     bytes32[] public availableMarkets;
-
-    mapping(bytes4 => bool) public availableFunctionSelector;
 
     /**
      * @dev Throws if called by any accoutn other than the Admin
@@ -88,16 +75,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
         _updateMinimumOrderAmount(_minimumOrderAmount);
-
-        availableFunctionSelector[ADD_POSITION_SELECTOR] = true;
-        availableFunctionSelector[REDUCE_POSITION_SELECTOR] = true;
-        availableFunctionSelector[CLOSE_POSITION_SELECTOR] = true;
-        availableFunctionSelector[CANCEL_ORDER_SELECTOR] = true;
-        availableFunctionSelector[LIQUIDATE_SELECTOR] = true;
-        availableFunctionSelector[FILL_ORDER_SELECTOR] = true;
-        availableFunctionSelector[SETTLE_FUNDING_SELECTOR] = true;
-        availableFunctionSelector[ADD_COLLATERAL_SELECTOR] = true;
-        availableFunctionSelector[REDUCE_COLLATERAL_SELECTOR] = true;
     }
 
     /**
@@ -389,14 +366,24 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         uint256 sigLen = signatures.length;
         for (uint256 i = 0; i < sigLen; i++) {
             bytes4 selector = bytes4(signatures[i]);
-            if (!availableFunctionSelector[selector]) {
-                emit BulkProcessFailedTxSelectorNotFound(i, selector);
+            if (
+                selector == this.addPosition.selector ||
+                selector == this.closePosition.selector || 
+                selector == this.reducePosition.selector ||
+                selector == this.addCollateral.selector ||
+                selector == this.reduceCollateral.selector ||
+                selector == this.fillOrder.selector ||
+                selector == this.cancelOrder.selector ||
+                selector == this.settleFundingFee.selector ||
+                selector == this.liquidate.selector
+            ){
+                (bool success, bytes memory data) = address(this).delegatecall(signatures[i]);
+                if (!success) {
+                    emit BulkProcessFailedTxReverted(i, data);
+                }
                 continue;
-            }
-            (bool success, bytes memory data) = address(this).delegatecall(signatures[i]);
-            if (!success) {
-                emit BulkProcessFailedTxReverted(i, data);
-            }
+            } 
+            emit BulkProcessFailedTxSelectorNotFound(i, selector);
         }
     }
 
