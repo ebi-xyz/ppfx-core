@@ -447,12 +447,12 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         test_AddMarket();
        
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](40);
+        bytes[] memory bs = new bytes[](40);
         for (uint256 i = 0; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
+            bs[i] = abi.encodeWithSelector(ppfx.addPosition.selector, address(this), "BTC", 1 gwei, 0);
         }
         for (uint256 i = 30; i < 40; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.REDUCE_POSITION_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
+            bs[i] = abi.encodeWithSelector(ppfx.reducePosition.selector, address(this), "BTC", 1 gwei, 0, false, 0);
         }
 
         ppfx.bulkProcessFunctions(bs);
@@ -464,9 +464,9 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         test_AddMarket();
        
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](1);
+        bytes[] memory bs = new bytes[](1);
         for (uint256 i = 0; i < 1; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
+            bs[i] = abi.encodeWithSelector(ppfx.addCollateral.selector, address(this), "BTC", 1 gwei, 0);
         }
 
         ppfx.bulkProcessFunctions(bs);
@@ -474,16 +474,44 @@ contract PPFXTest is Test {
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 1 gwei);
     }
 
+    function test_Success20BulkPositionUpdates() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+       
+        bytes[] memory bs = new bytes[](20);
+        for (uint256 i = 0; i < 20; i++) {
+            bs[i] = abi.encodeWithSelector(ppfx.addCollateral.selector, address(this), "BTC", 1 gwei, 0);
+        }
+
+        ppfx.bulkProcessFunctions(bs);
+
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 20 gwei);
+    }
+
+    function test_Success10BulkPositionUpdates() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+       
+        bytes[] memory bs = new bytes[](10);
+        for (uint256 i = 0; i < 10; i++) {
+            bs[i] = abi.encodeWithSelector(ppfx.addCollateral.selector, address(this), "BTC", 1 gwei, 0);
+        }
+
+        ppfx.bulkProcessFunctions(bs);
+
+        assertEq(ppfx.userFundingBalance(address(this)), 1 ether - 10 gwei);
+    }
+
     function test_SuccessBulkPositionUpdatesPartiallyFailed() public {
         test_SuccessDeposit();
         test_AddMarket();
        
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](30);
+        bytes[] memory bs = new bytes[](30);
         for (uint256 i = 0; i < 10; i++) {
-            bs[i] = IPPFX.BulkStruct(ppfx.ADD_COLLATERAL_SELECTOR(), address(this), "BTC", 1 gwei, 0, false, 0, false);
+            bs[i] = abi.encodeWithSelector(ppfx.addCollateral.selector, address(this), "BTC", 1 gwei, 0);
         }
         for (uint256 i = 10; i < 30; i++) {
-            bs[i] = IPPFX.BulkStruct(0x12345678, address(this), "BTC", 1 gwei, 0, false, 0, false);
+            bs[i] = abi.encodeWithSelector(0x12345678, address(this), "BTC", 1 gwei, 0, false, 0, false);
         }
 
         ppfx.bulkProcessFunctions(bs);
@@ -495,7 +523,7 @@ contract PPFXTest is Test {
         test_SuccessDeposit();
         test_AddMarket();
        
-        IPPFX.BulkStruct[] memory bs = new PPFX.BulkStruct[](0);
+        bytes[] memory bs = new bytes[](0);
 
         ppfx.bulkProcessFunctions(bs);
 
