@@ -87,7 +87,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     /**
      * @dev Get trading balance in a single market.
      */
-    function getTradingBalanceForMarket(address target, string memory marketName) external view returns (uint256) {
+    function getTradingBalanceForMarket(address target, string calldata marketName) external view returns (uint256) {
         bytes32 market = _marketHash(marketName);
         return userTradingBalance[target][market];
     }
@@ -190,7 +190,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` funding balance must have at least `amount` + `fee`.
      */
-    function addPosition(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
+    function addPosition(address user, string calldata marketName, uint256 amount, uint256 fee) external onlyOperator {
         _addPosition(user, marketName, amount, fee);
     }
 
@@ -213,7 +213,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `user` trading balance must have at least `amount` + `fee`.
      * - if `isProfit` is false, `uPNL` must be less than `user` trading balance. 
      */
-    function reducePosition(address user, string memory marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) external onlyOperator {
+    function reducePosition(address user, string calldata marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) external onlyOperator {
         _reducePosition(user, marketName, amount, uPNL, isProfit, fee);
     }
 
@@ -234,7 +234,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `user` trading balance must have at least `fee`.
      * - if `isProfit` is false, `uPNL` must be less than `user` trading balance. 
      */
-    function closePosition(address user, string memory marketName, uint256 uPNL, bool isProfit, uint256 fee) external onlyOperator {
+    function closePosition(address user, string calldata marketName, uint256 uPNL, bool isProfit, uint256 fee) external onlyOperator {
         _closePosition(user, marketName, uPNL, isProfit, fee);
     }
 
@@ -251,7 +251,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` trading balance must have at least `amount` + `fee`.
      */
-    function fillOrder(address user, string memory marketName, uint256 fee) external onlyOperator {
+    function fillOrder(address user, string calldata marketName, uint256 fee) external onlyOperator {
         _fillOrder(user, marketName, fee);
     }
 
@@ -268,7 +268,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` trading balance must have at least `amount` + `fee`.
      */
-    function cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
+    function cancelOrder(address user, string calldata marketName, uint256 amount, uint256 fee) external onlyOperator {
         _cancelOrder(user, marketName, amount, fee);
     }
 
@@ -285,7 +285,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` trading balance must have at least `amount`.
      */
-    function settleFundingFee(address user, string memory marketName, uint256 amount, bool isAdd) external onlyOperator {
+    function settleFundingFee(address user, string calldata marketName, uint256 amount, bool isAdd) external onlyOperator {
         _settleFundingFee(user, marketName, amount, isAdd);
     }
 
@@ -304,7 +304,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` trading balance must have at least `amount` + `fee`.
      */
-    function liquidate(address user, string memory marketName, uint256 amount, uint256 fee) external onlyOperator {
+    function liquidate(address user, string calldata marketName, uint256 amount, uint256 fee) external onlyOperator {
         _liquidate(user, marketName, amount, fee);
     }
 
@@ -320,7 +320,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` funding balance must have at least `amount`.
      */
-    function addCollateral(address user, string memory marketName, uint256 amount) external onlyOperator {
+    function addCollateral(address user, string calldata marketName, uint256 amount) external onlyOperator {
         _addCollateral(user, marketName, amount);
     }
 
@@ -336,7 +336,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * - `marketName` must exists
      * - `user` trading balance must have at least `amount`.
      */
-    function reduceCollateral(address user, string memory marketName, uint256 amount) external onlyOperator {
+    function reduceCollateral(address user, string calldata marketName, uint256 amount) external onlyOperator {
         _reduceCollateral(user, marketName, amount);
     }
 
@@ -349,7 +349,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * Requirements:
      * - `marketName` must not exists exists in the available markets.
      */
-    function addMarket(string memory marketName) external onlyAdmin() {
+    function addMarket(string calldata marketName) external onlyAdmin() {
         _addMarket(marketName);
     }
 
@@ -534,7 +534,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * Internal functions *
      ****************************/
 
-    function _marketHash(string memory marketName) internal pure returns (bytes32) {
+    function _marketHash(string calldata marketName) internal pure returns (bytes32) {
         return keccak256(bytes(marketName));
     }
 
@@ -592,7 +592,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         marketTotalTradingBalance[market] += amount;
     }
 
-    function _addPosition(address user, string memory marketName, uint256 amount, uint256 fee) internal {
+    function _addPosition(address user, string calldata marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
@@ -605,7 +605,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit PositionAdded(user, marketName, amount, fee);
     }
 
-    function _reducePosition(address user, string memory marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) internal {
+    function _reducePosition(address user, string calldata marketName, uint256 amount, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
@@ -632,7 +632,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit PositionReduced(user, marketName, amount, fee);
     }
 
-    function _closePosition(address user, string memory marketName, uint256 uPNL, bool isProfit, uint256 fee) internal {
+    function _closePosition(address user, string calldata marketName, uint256 uPNL, bool isProfit, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         // Make sure its able to subtract fee with user trading balance
@@ -641,7 +641,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         _reducePosition(user, marketName, userTradingBalance[user][market] - fee, uPNL, isProfit, fee);
     }
 
-    function _cancelOrder(address user, string memory marketName, uint256 amount, uint256 fee) internal {
+    function _cancelOrder(address user, string calldata marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         uint256 total = amount + fee;
@@ -654,7 +654,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit OrderCancelled(user, marketName, amount, fee);
     }
 
-    function _liquidate(address user, string memory marketName, uint256 amount, uint256 fee) internal {
+    function _liquidate(address user, string calldata marketName, uint256 amount, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= amount + fee, "Insufficient trading balance to liquidate");
@@ -665,7 +665,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit Liquidated(user, marketName, amount, fee);
     }
 
-    function _fillOrder(address user, string memory marketName, uint256 fee) internal {
+    function _fillOrder(address user, string calldata marketName, uint256 fee) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= fee, "Insufficient trading balance to pay order filling fee");
@@ -675,7 +675,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit OrderFilled(user, marketName, fee);
     }
 
-    function _settleFundingFee(address user, string memory marketName, uint256 amount, bool isAdd) internal {
+    function _settleFundingFee(address user, string calldata marketName, uint256 amount, bool isAdd) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
 
@@ -693,7 +693,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit FundingSettled(user, marketName, amount);
     }
 
-    function _addCollateral(address user, string memory marketName, uint256 amount) internal {
+    function _addCollateral(address user, string calldata marketName, uint256 amount) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(userFundingBalance[user] + pendingWithdrawalBalance[user] >= amount, "Insufficient funding balance to add collateral");
@@ -702,7 +702,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit CollateralAdded(user, marketName, amount);
     }
 
-    function _reduceCollateral(address user, string memory marketName, uint256 amount) internal {
+    function _reduceCollateral(address user, string calldata marketName, uint256 amount) internal {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to reduce collateral");
@@ -712,7 +712,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit CollateralDeducted(user, marketName, amount);
     }
 
-    function _addMarket(string memory marketName) internal {
+    function _addMarket(string calldata marketName) internal {
         bytes32 market = _marketHash(marketName);
         require(!marketExists[market], "Market already exists");
         availableMarkets.push(market);
