@@ -39,17 +39,6 @@ interface IPPFX {
     event BulkProcessFailedTxSelectorNotFound(uint256 indexed txIndex, bytes4 methodID);
     event BulkProcessFailedTxReverted(uint256 indexed txIndex, bytes data);
 
-    struct BulkStruct {
-        bytes4 methodID;
-        address user;
-        string marketName;
-        uint256 amount;
-        uint256 uPNL;
-        bool isProfit;
-        uint256 fee;
-        bool isAdd;
-    }
-
     /**
      * @dev Get Sender total trading balance.
      * @return Sum of sender's trading balance across all available markets.
