@@ -13,17 +13,6 @@ import {IPPFX} from "./IPPFX.sol";
 contract PPFX is IPPFX, Context, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    bytes4 constant public ADD_POSITION_SELECTOR = 0xa54efd84; // bytes4(keccak256("addPosition(address,string,uint256,uint256)"))
-    bytes4 constant public REDUCE_POSITION_SELECTOR = 0x292bd94c; // bytes4(keccak256("reducePosition(address,string,uint256,uint256,bool,uint256)"))
-    bytes4 constant public CLOSE_POSITION_SELECTOR = 0x29228a43; // bytes4(keccak256("closePosition(address,string,uint256,uint256)"))
-    bytes4 constant public CANCEL_ORDER_SELECTOR = 0x17a0b3e0; // bytes4(keccak256("cancelOrder(address,string,uint256,uint256)"))
-    bytes4 constant public LIQUIDATE_SELECTOR = 0xdd5273dc; // bytes4(keccak256("liquidate(address,string,uint256,uint256)"))
-
-    bytes4 constant public FILL_ORDER_SELECTOR = 0x21c5aa45; // bytes4(keccak256("fillOrder(address,string,uint256)"))
-    bytes4 constant public SETTLE_FUNDING_SELECTOR = 0x640fd4b5; // bytes4(keccak256("settleFundingFee(address,string,uint256,bool)"))
-    bytes4 constant public ADD_COLLATERAL_SELECTOR = 0x0c086c2d; // bytes4(keccak256("addCollateral(address,string,uint256)"))
-    bytes4 constant public REDUCE_COLLATERAL_SELECTOR = 0xcec57775; // bytes4(keccak256("reduceCollateral(address,string,uint256)"))
-
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -368,41 +357,33 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     /**
      * @dev Bulk Process multiple function calls
      *
-     * @param bulkStructs List of BulkStruct to execute
+     * @param signatures List of encoded selector & args to execute
      *
      */
     function bulkProcessFunctions(
-        BulkStruct[] calldata bulkStructs
+        bytes[] calldata signatures
     ) external onlyOperator {
-        for (uint256 i = 0; i < bulkStructs.length; i++) {
-            bytes memory sig;
-            bytes4 methodID = bulkStructs[i].methodID;
-            if (methodID == ADD_POSITION_SELECTOR) {
-                sig = abi.encodeWithSelector(ADD_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (methodID == REDUCE_POSITION_SELECTOR) {
-                sig = abi.encodeWithSelector(REDUCE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (methodID == CLOSE_POSITION_SELECTOR) {
-                sig = abi.encodeWithSelector(CLOSE_POSITION_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].uPNL, bulkStructs[i].isProfit, bulkStructs[i].fee);
-            } else if (methodID == CANCEL_ORDER_SELECTOR) {
-                sig = abi.encodeWithSelector(CANCEL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (methodID == LIQUIDATE_SELECTOR) {
-                sig = abi.encodeWithSelector(LIQUIDATE_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].fee);
-            } else if (methodID == FILL_ORDER_SELECTOR) {
-                sig = abi.encodeWithSelector(FILL_ORDER_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (methodID == SETTLE_FUNDING_SELECTOR) {
-                sig = abi.encodeWithSelector(SETTLE_FUNDING_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount, bulkStructs[i].isAdd);
-            } else if (methodID == ADD_COLLATERAL_SELECTOR) {
-                sig = abi.encodeWithSelector(ADD_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else if (methodID == REDUCE_COLLATERAL_SELECTOR) {
-                sig = abi.encodeWithSelector(REDUCE_COLLATERAL_SELECTOR, bulkStructs[i].user, bulkStructs[i].marketName, bulkStructs[i].amount);
-            } else {
-                emit BulkProcessFailedTxSelectorNotFound(i, methodID);
+        uint256 sigLen = signatures.length;
+        for (uint256 i = 0; i < sigLen; i++) {
+            bytes4 selector = bytes4(signatures[i]);
+            if (
+                selector == this.addPosition.selector ||
+                selector == this.closePosition.selector || 
+                selector == this.reducePosition.selector ||
+                selector == this.addCollateral.selector ||
+                selector == this.reduceCollateral.selector ||
+                selector == this.fillOrder.selector ||
+                selector == this.cancelOrder.selector ||
+                selector == this.settleFundingFee.selector ||
+                selector == this.liquidate.selector
+            ){
+                (bool success, bytes memory data) = address(this).delegatecall(signatures[i]);
+                if (!success) {
+                    emit BulkProcessFailedTxReverted(i, data);
+                }
                 continue;
-            }
-            (bool success, bytes memory data) = address(this).delegatecall(sig);
-            if (!success) {
-                emit BulkProcessFailedTxReverted(i, data);
-            }
+            } 
+            emit BulkProcessFailedTxSelectorNotFound(i, selector);
         }
     }
 
