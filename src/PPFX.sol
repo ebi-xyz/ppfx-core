@@ -365,25 +365,30 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     ) external onlyOperator {
         uint256 sigLen = signatures.length;
         for (uint256 i = 0; i < sigLen; i++) {
-            bytes4 selector = bytes4(signatures[i]);
-            if (
-                selector == this.addPosition.selector ||
-                selector == this.closePosition.selector || 
-                selector == this.reducePosition.selector ||
-                selector == this.addCollateral.selector ||
-                selector == this.reduceCollateral.selector ||
-                selector == this.fillOrder.selector ||
-                selector == this.cancelOrder.selector ||
-                selector == this.settleFundingFee.selector ||
-                selector == this.liquidate.selector
-            ){
-                (bool success, bytes memory data) = address(this).delegatecall(signatures[i]);
-                if (!success) {
-                    emit BulkProcessFailedTxReverted(i, data);
+            bytes calldata sig = signatures[i];
+            if (sig.length < 4) {
+                emit BulkProcessFailedTxInvalidSignature(i, sig);
+            } else {
+                bytes4 selector = bytes4(sig);
+                if (
+                    selector == this.addPosition.selector ||
+                    selector == this.closePosition.selector || 
+                    selector == this.reducePosition.selector ||
+                    selector == this.addCollateral.selector ||
+                    selector == this.reduceCollateral.selector ||
+                    selector == this.fillOrder.selector ||
+                    selector == this.cancelOrder.selector ||
+                    selector == this.settleFundingFee.selector ||
+                    selector == this.liquidate.selector
+                ){
+                    (bool success, bytes memory data) = address(this).delegatecall(sig);
+                    if (!success) {
+                        emit BulkProcessFailedTxReverted(i, data);
+                    }
+                } else {
+                    emit BulkProcessFailedTxSelectorNotFound(i, selector);
                 }
-                continue;
-            } 
-            emit BulkProcessFailedTxSelectorNotFound(i, selector);
+            }
         }
     }
 
