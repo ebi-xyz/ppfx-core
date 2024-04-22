@@ -694,12 +694,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         if (isAdd) {
             require(availableFundingFee >= amount, "Insufficient collected funding fee to add funding fee");
-            _deductTotalTradingBalance(market, amount);
-            userFundingBalance[user] += amount;
             availableFundingFee -= amount;
+            userFundingBalance[user] += amount;
         } else {
             require(userTradingBalance[user][market] >= amount, "Insufficient trading balance to deduct funding fee");
             _deductUserTradingBalance(user, market, amount);
+            _deductTotalTradingBalance(market, amount);
             availableFundingFee += amount;
         }
         
