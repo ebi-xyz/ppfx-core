@@ -614,8 +614,16 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         bytes32 market = _marketHash(marketName);
         require(marketExists[market], "Provided market does not exists");
         require(amount >= minimumOrderAmount, "Position amount is less than minimum order amount");
+
         uint256 total = amount + fee;
-        require(userTradingBalance[user][market] >= total, "Insufficient trading balance to reduce position");
+        uint256 userTradingBal = userTradingBalance[user][market];
+
+        require(userTradingBal >= total, "Insufficient trading balance to reduce position");
+
+        uint256 newTradingBal = userTradingBal - total;
+        if (newTradingBal > 0) {
+            require(newTradingBal >= minimumOrderAmount, "New position amount is greater than 0 and less than minimum order amount");
+        }
 
         if (isProfit) {
             // Solvency check
@@ -626,7 +634,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
             userFundingBalance[user] += amount + uPNL;
         } else {
-            require(uPNL <= userTradingBalance[user][market] - fee, "Insufficient trading balance to settle uPNL");
+            require(uPNL <= userTradingBal - fee, "Insufficient trading balance to settle uPNL");
 
             _deductUserTradingBalance(user, market, total);
             _deductTotalTradingBalance(market, total - uPNL);
