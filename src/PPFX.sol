@@ -36,7 +36,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     mapping(address => uint256) public userFundingBalance;
 
     mapping(address => uint256) public pendingWithdrawalBalance;
-    mapping(address => uint256) public lastWithdrawalBlock;
+    mapping(address => uint256) public lastWithdrawalTime;
 
     mapping(bytes32 => bool) public marketExists;
     bytes32[] public availableMarkets;
@@ -152,7 +152,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
         pendingWithdrawalBalance[_msgSender()] += amount;
-        lastWithdrawalBlock[_msgSender()] = block.timestamp;
+        lastWithdrawalTime[_msgSender()] = block.timestamp;
         emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
     }
 
@@ -166,10 +166,10 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function claimPendingWithdrawal() external nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.timestamp >= lastWithdrawalBlock[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        require(block.timestamp >= lastWithdrawalTime[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
         usdt.safeTransfer(_msgSender(), pendingBal);
         pendingWithdrawalBalance[_msgSender()] = 0;
-        lastWithdrawalBlock[_msgSender()] = 0;
+        lastWithdrawalTime[_msgSender()] = 0;
         emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
     }
 
@@ -571,12 +571,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 // Subtracting `amount` from pending withdrawal balance and
                 // reset the withdrawal countdown
                 pendingWithdrawalBalance[user] -= amount;
-                lastWithdrawalBlock[user] = block.timestamp;
+                lastWithdrawalTime[user] = block.timestamp;
             } else { // `amount` is >= pending withdrawal balance
                 // Clear pending withdrawal balance
                 uint256 remaining = amount - pendingWithdrawalBalance[user];
                 pendingWithdrawalBalance[user] = 0;
-                lastWithdrawalBlock[user] = 0;
+                lastWithdrawalTime[user] = 0;
 
                 // Subtract from funding balance if there is remaining
                 if (remaining > 0) {
