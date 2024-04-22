@@ -147,7 +147,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * Emits a {UserWithdrawal} event.
      *
      */
-    function withdraw(uint256 amount) external {
+    function withdraw(uint256 amount) external nonReentrant {
         require(amount > 0, "Invalid amount");
         require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
         userFundingBalance[_msgSender()] -= amount;
