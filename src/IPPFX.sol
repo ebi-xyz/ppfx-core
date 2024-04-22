@@ -36,6 +36,7 @@ interface IPPFX {
 
     event Liquidated(address indexed user, string market, uint256 amount, uint256 fee);
 
+    event BulkProcessFailedTxInvalidSignature(uint256 indexed txIndex, bytes sig);
     event BulkProcessFailedTxSelectorNotFound(uint256 indexed txIndex, bytes4 methodID);
     event BulkProcessFailedTxReverted(uint256 indexed txIndex, bytes data);
 
