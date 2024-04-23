@@ -627,7 +627,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         if (isProfit) {
             // Solvency check
-            require(uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
+            require(total + uPNL <= marketTotalTradingBalance[market], "uPNL profit will cause market insolvency"); 
 
             _deductUserTradingBalance(user, market, total);
             _deductTotalTradingBalance(market, total + uPNL);
