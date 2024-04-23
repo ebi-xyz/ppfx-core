@@ -30,6 +30,8 @@ contract PPFXTest is Test {
             5,
             1
         );
+
+        ppfx.addOperator(address(this));
     }
 
     function test_SuccessDeposit() public {
@@ -528,6 +530,15 @@ contract PPFXTest is Test {
         ppfx.bulkProcessFunctions(bs);
 
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
+    }
+
+    function testFail_TooManyOperators() public {
+        uint256 max = ppfx.MAX_OPERATORS() + 1;
+        for (uint i = 1; i < max; i++) {
+            ppfx.addOperator(address(uint160(i)));
+        }
+        
+        vm.expectRevert(bytes("Too many operators"));
     }
 
     function testFail_DepositZero() public {
