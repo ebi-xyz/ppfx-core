@@ -6,6 +6,7 @@ import {PPFX} from "../src/PPFX.sol";
 import {IPPFX} from "../src/IPPFX.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 contract USDT is ERC20 {
     constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {
@@ -532,55 +533,55 @@ contract PPFXTest is Test {
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
     }
 
-    function testFail_TooManyOperators() public {
+    function test_Fail_TooManyOperators() public {
         uint256 max = ppfx.MAX_OPERATORS() + 1;
         for (uint i = 1; i < max; i++) {
             ppfx.addOperator(address(uint160(i)));
         }
-        
         vm.expectRevert(bytes("Too many operators"));
+        ppfx.addOperator(address(uint160(444)));
     }
 
-    function testFail_DepositZero() public {
+    function test_Fail_DepositZero() public {
+        vm.expectRevert(bytes("Invalid amount"));
         ppfx.deposit(0);
-        vm.expectRevert(bytes("Invalid amount"));
     }
 
-    function testFail_NoAllowanceDeposit() public {
+    function test_Fail_NoAllowanceDeposit() public {
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(ppfx), 0, 1 ether));
         ppfx.deposit(1 ether);
-        vm.expectRevert(bytes("Insufficient allowance"));
     }
 
-    function testFail_NoAllowanceDepositMax() public {
+    function test_Fail_NoAllowanceDepositMax() public {
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(ppfx), 0, 2**256-1));
         ppfx.deposit(2**256-1);
-        vm.expectRevert(bytes("Insufficient allowance"));
     }
 
-    function testFail_withdrawMax() public {
-        ppfx.withdraw(2**256-1);
+    function test_Fail_withdrawMax() public {
         vm.expectRevert(bytes("Insufficient balance from funding account"));
+        ppfx.withdraw(2**256-1);
     }
 
-    function testFail_withdrawZero() public {
-        ppfx.withdraw(0);
+    function test_Fail_withdrawZero() public {
         vm.expectRevert(bytes("Invalid amount"));
+        ppfx.withdraw(0);
     }
 
-    function testFail_UpdateInvalidWithdrawalBlockTime() public {
+    function test_Fail_UpdateInvalidWithdrawalBlockTime() public {
+        vm.expectRevert(bytes("Invalid new wait time"));
         ppfx.updateWithdrawalWaitTime(0);
-        vm.expectRevert(bytes("Invalid new block time"));
     }
 
-    function testFail_WithdrawBeforeAvailable() public {
+    function test_Fail_WithdrawBeforeAvailable() public {
         test_SuccessDeposit();
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         vm.warp(block.timestamp + 2);
-        ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
+        ppfx.claimPendingWithdrawal();
     }
 
-    function testFail_WithdrawTwiceBeforeAvailable() public {
+    function test_Fail_WithdrawTwiceBeforeAvailable() public {
         usdt.approve(address(ppfx), 2 ether);
         ppfx.deposit(2 ether);
         assertEq(ppfx.totalBalance(address(this)), 2 ether);
@@ -591,63 +592,59 @@ contract PPFXTest is Test {
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
         vm.warp(block.timestamp + 4);
-        ppfx.claimPendingWithdrawal();
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
+        ppfx.claimPendingWithdrawal();
     }
 
-    function testFail_WithdrawAllThenAddPosition() public {
+    function test_Fail_WithdrawAllThenAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
         ppfx.withdraw(1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
-        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
         vm.expectRevert(bytes("Insufficient funding balance to add position"));
+        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
     }
 
-    function testFail_WithdrawHalfThenAddPosition() public {
+    function test_Fail_WithdrawHalfThenAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
         ppfx.withdraw(0.5 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
-        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
         vm.expectRevert(bytes("Insufficient funding balance to add position"));
+        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
     }
 
-    function testFail_AddPositionInsufficientBalanceForFee() public {
+    function test_Fail_AddPositionInsufficientBalanceForFee() public {
+        test_SuccessDeposit();
+        test_AddMarket();
+        vm.expectRevert(bytes("Insufficient funding balance to add position"));
+        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
+    }
+
+    function test_Fail_AddPositionInsufficientBalance() public {
         test_SuccessDeposit();
         test_AddMarket();
 
-        ppfx.addPosition(address(this), "BTC", 1 ether, 1);
-
         vm.expectRevert(bytes("Insufficient funding balance to add position"));
-    }
-
-    function testFail_AddPositionInsufficientBalance() public {
-        test_SuccessDeposit();
-        test_AddMarket();
-
         ppfx.addPosition(address(this), "BTC", 1 ether + 1, 0);
-
-        vm.expectRevert(bytes("Insufficient funding balance to add position"));
     }
 
-    function testFail_ReducePositionInsufficientBalanceForFee() public {
+    function test_Fail_ReducePositionInsufficientBalanceForFee() public {
         test_SuccessAddPosition();
-
-        ppfx.reducePosition(address(this), "BTC", 1 ether, 0, false, 1);
 
         vm.expectRevert(bytes("Insufficient trading balance to reduce position"));
+        ppfx.reducePosition(address(this), "BTC", 1 ether, 0, false, 1);
     }
 
-    function testFail_ReducePositionInsufficientBalance() public {
+    function test_Fail_ReducePositionInsufficientBalance() public {
         test_SuccessAddPosition();
 
-        ppfx.reducePosition(address(this), "BTC", 1 ether, 1000000, false, 0);
-
         vm.expectRevert(bytes("Insufficient trading balance to settle uPNL"));
+        ppfx.reducePosition(address(this), "BTC", 1 ether, 1 ether + 1, false, 0);
+       
     }
 
-    function testFail_ClosePositionInsufficientBalanceForFee() public {
+    function test_Fail_ClosePositionInsufficientBalanceForFee() public {
         // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
         // Bob Short BTC with 1,000,000,000,000 USDT
@@ -657,107 +654,89 @@ contract PPFXTest is Test {
         ppfx.closePosition(address(this), "BTC", 1 ether, true, 0);
 
         // Bob close position with 100% profit which couldn't happen
+        vm.expectRevert(bytes("uPNL profit will cause market insolvency"));
         ppfx.closePosition(address(1), "BTC", 1 ether, true, 0);
 
-        vm.expectRevert(bytes("Insufficient trading balance to close position"));
+        
     }
 
-    function testFail_ClosePositionCauseInsolvency() public {
+    function test_Fail_ClosePositionCauseInsolvency() public {
         // Alice Long BTC with 1,000,000,000,000 USDT
         test_SuccessAddPosition();
         
         // Close position with 1,000,000,000,001 USDT Porfit
-        ppfx.closePosition(address(this), "BTC", 1 ether + 1000000, true, 0);
-
         vm.expectRevert(bytes("uPNL profit will cause market insolvency"));
+        ppfx.closePosition(address(this), "BTC", 1 ether + 1000000, true, 0);
     }
 
-    function testFail_FillOrderInsufficientBalance() public {
+    function test_Fail_FillOrderInsufficientBalance() public {
         test_SuccessAddPosition();
-
-        ppfx.fillOrder(address(this), "BTC", 2 ether);
-
         vm.expectRevert(bytes("Insufficient trading balance to pay order filling fee"));
+        ppfx.fillOrder(address(this), "BTC", 2 ether);
     }
 
-    function testFail_CancelOrderInsufficientBalanceForFee() public {
+    function test_Fail_CancelOrderInsufficientBalanceForFee() public {
         test_SuccessAddPosition();
-
+        vm.expectRevert(bytes("Insufficient trading balance to cancel order"));
         ppfx.cancelOrder(address(this), "BTC", 1 ether, 1);
-
-        vm.expectRevert(bytes("Insufficient trading balance to cancel order"));
     }
 
-    function testFail_CancelOrderInsufficientBalance() public {
+    function test_Fail_CancelOrderInsufficientBalance() public {
         test_SuccessAddPosition();
-
+        vm.expectRevert(bytes("Insufficient trading balance to cancel order"));
         ppfx.cancelOrder(address(this), "BTC", 1 ether + 1, 0);
-
-        vm.expectRevert(bytes("Insufficient trading balance to cancel order"));
     }
 
-    function testFail_SettleFundingFeeInsufficientCollectedFeeToAdd() public {
+    function test_Fail_SettleFundingFeeInsufficientCollectedFeeToAdd() public {
         test_SuccessAddPosition();
-
-        ppfx.settleFundingFee(address(this), "BTC", 1 ether, true);
-
         vm.expectRevert(bytes("Insufficient collected funding fee to add funding fee"));
+        ppfx.settleFundingFee(address(this), "BTC", 1 ether, true);
     }
 
-    function testFail_SettleFundingFeeInsufficientTradingBalanceToDeduct() public {
+    function test_Fail_SettleFundingFeeInsufficientTradingBalanceToDeduct() public {
         test_SuccessAddPosition();
-
-        ppfx.settleFundingFee(address(this), "BTC", 1 ether + 1, false);
-
         vm.expectRevert(bytes("Insufficient trading balance to deduct funding fee"));
+        ppfx.settleFundingFee(address(this), "BTC", 1 ether + 1, false);
     }
 
-    function testFail_LiquidateInsufficientBalanceForFee() public {
+    function test_Fail_LiquidateInsufficientBalanceForFee() public {
         test_SuccessAddPosition();
-
+        vm.expectRevert(bytes("Insufficient trading balance to liquidate"));
         ppfx.liquidate(address(this), "BTC", 1 ether, 1);
-
-        vm.expectRevert(bytes("Insufficient trading balance to liquidate"));
     }
 
-    function testFail_LiquidateInsufficientBalance() public {
+    function test_Fail_LiquidateInsufficientBalance() public {
         test_SuccessAddPosition();
-
+        vm.expectRevert(bytes("Insufficient trading balance to liquidate"));
         ppfx.liquidate(address(this), "BTC", 1 ether + 1, 0);
-
-        vm.expectRevert(bytes("Insufficient trading balance to liquidate"));
     }
 
-    function testFail_AddCollateralInsufficientBalance() public {
+    function test_Fail_AddCollateralInsufficientBalance() public {
         test_SuccessAddPosition();
-
-        ppfx.addCollateral(address(this), "BTC", 1);
-
         vm.expectRevert(bytes("Insufficient funding balance to add collateral"));
+        ppfx.addCollateral(address(this), "BTC", 1);
     }
 
-    function testFail_ReduceCollateralInsufficientBalance() public {
+    function test_Fail_ReduceCollateralInsufficientBalance() public {
         test_SuccessAddPosition();
-
-        ppfx.reduceCollateral(address(this), "BTC", 1 ether + 1);
-
         vm.expectRevert(bytes("Insufficient trading balance to reduce collateral"));
+        ppfx.reduceCollateral(address(this), "BTC", 1 ether + 1);
     }
 
-    function testFail_NotAdmin() public {
+    function test_Fail_NotAdmin() public {
         vm.startPrank(address(0));
 
+        vm.expectRevert(bytes("Caller not admin"));
         ppfx.updateTreasury(address(1));
+        
         vm.expectRevert(bytes("Caller not admin"));
-
         ppfx.updateInsurance(address(1));
-        vm.expectRevert(bytes("Caller not admin"));
 
+        vm.expectRevert(bytes("Caller not admin"));
         ppfx.updateUsdt(address(1));
-        vm.expectRevert(bytes("Caller not admin"));
 
-        ppfx.updateWithdrawalWaitTime(1);
         vm.expectRevert(bytes("Caller not admin"));
+        ppfx.updateWithdrawalWaitTime(1);
 
         vm.stopPrank();
     }
@@ -776,103 +755,103 @@ contract PPFXTest is Test {
         assertEq(ppfx.withdrawalWaitTime(), 444);
     }
 
-    function testFail_NotAdminAddOperator() public {
+    function test_Fail_NotAdminAddOperator() public {
         vm.startPrank(address(0));
+        vm.expectRevert(bytes("Caller not admin"));
         ppfx.addOperator(address(1));
-        vm.expectRevert(bytes("Caller not admin"));
     }
 
-    function testFail_NotAdminRemoveOperator() public {
+    function test_Fail_NotAdminRemoveOperator() public {
         vm.startPrank(address(0));
+        vm.expectRevert(bytes("Caller not admin"));
         ppfx.removeOperator(address(this));
-        vm.expectRevert(bytes("Caller not admin"));
     }
 
-    function testFail_NotAdminRemoveAllOperators() public {
+    function test_Fail_NotAdminRemoveAllOperators() public {
         vm.startPrank(address(0));
-        ppfx.removeAllOperator();
         vm.expectRevert(bytes("Caller not admin"));
+        ppfx.removeAllOperator();
     }
 
-    function testFail_RemoveNotExistsOperator() public {
-        ppfx.removeOperator(address(3));
+    function test_Fail_RemoveNotExistsOperator() public {
         vm.expectRevert(bytes("Operator does not exists"));
+        ppfx.removeOperator(address(3));
     }
 
-    function testFail_NoOperatorRemoveAllOperators() public {
+    function test_Fail_NoOperatorRemoveAllOperators() public {
         ppfx.removeAllOperator();
         assertEq(ppfx.getAllOperators().length, 0);
-        ppfx.removeAllOperator();
         vm.expectRevert(bytes("No operator found"));
+        ppfx.removeAllOperator();
     }
 
-    function testFail_NotOperator() public {
+    function test_Fail_NotOperator() public {
         vm.startPrank(address(0));
 
+        vm.expectRevert(bytes("Caller not operator"));
         ppfx.addPosition(address(this), "BTC", 1, 1);
+        
         vm.expectRevert(bytes("Caller not operator"));
-
         ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
-        vm.expectRevert(bytes("Caller not operator"));
 
+        vm.expectRevert(bytes("Caller not operator"));
         ppfx.closePosition(address(this), "BTC", 1, false, 1);
+        
         vm.expectRevert(bytes("Caller not operator"));
-
         ppfx.fillOrder(address(this), "BTC", 1);
-        vm.expectRevert(bytes("Caller not operator"));
 
+        vm.expectRevert(bytes("Caller not operator"));
         ppfx.cancelOrder(address(this), "BTC", 1, 1);
-        vm.expectRevert(bytes("Caller not operator"));
 
+        vm.expectRevert(bytes("Caller not operator"));
         ppfx.settleFundingFee(address(this), "BTC", 1, false);
-        vm.expectRevert(bytes("Caller not operator"));
 
+        vm.expectRevert(bytes("Caller not operator"));
         ppfx.liquidate(address(this), "BTC", 1, 1);
-        vm.expectRevert(bytes("Caller not operator"));
 
+        vm.expectRevert(bytes("Caller not operator"));
         ppfx.addCollateral(address(this), "BTC", 1);
-        vm.expectRevert(bytes("Caller not operator"));
 
-        ppfx.reduceCollateral(address(this), "BTC", 1);
         vm.expectRevert(bytes("Caller not operator"));
+        ppfx.reduceCollateral(address(this), "BTC", 1);
 
         vm.stopPrank();
     }
 
-    function testFail_CallWithNotExistsMarket() public {
+    function test_Fail_CallWithNotExistsMarket() public {
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.addPosition(address(this), "BTC", 1, 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.reducePosition(address(this), "BTC", 1, 0, false, 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.closePosition(address(this), "BTC", 1, false, 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.fillOrder(address(this), "BTC", 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.cancelOrder(address(this), "BTC", 1, 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.settleFundingFee(address(this), "BTC", 1, false);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.liquidate(address(this), "BTC", 1, 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
+        vm.expectRevert(bytes("Provided market does not exists"));
         ppfx.addCollateral(address(this), "BTC", 1);
-        vm.expectRevert(bytes("Provided market does not exists"));
 
-        ppfx.reduceCollateral(address(this), "BTC", 1);
         vm.expectRevert(bytes("Provided market does not exists"));
+        ppfx.reduceCollateral(address(this), "BTC", 1);
     }
 
-    function testFail_TransferAdminNotAllowed() public {
+    function test_Fail_TransferAdminNotAllowed() public {
         vm.startPrank(address(0));
 
-        ppfx.transferAdmin(address(1));
         vm.expectRevert(bytes("Caller not admin"));
+        ppfx.transferAdmin(address(1));
         
         vm.stopPrank();
     }
@@ -888,11 +867,11 @@ contract PPFXTest is Test {
         vm.stopPrank();
     }
 
-    function testFail_AcceptAdmin() public {
+    function test_Fail_AcceptAdmin() public {
         ppfx.transferAdmin(address(4));
 
         vm.startPrank(address(5));
-        ppfx.acceptAdmin();
         vm.expectRevert(bytes("Caller not pendingAdmin"));
+        ppfx.acceptAdmin();
     }
 }
