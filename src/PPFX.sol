@@ -16,6 +16,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     using Math for uint256;
     using SafeERC20 for IERC20;
 
+    uint256 constant public MAX_OPERATORS = 25;
+
     address public treasury;
     address public admin;
     address public insurance;
@@ -71,7 +73,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
-        _addOperator(_msgSender());
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
         _updateMinimumOrderAmount(_minimumOrderAmount);
@@ -449,6 +450,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function addOperator(address operatorAddr) external onlyAdmin {
         require(operatorAddr != address(0), "Operator address can not be zero");
         require(!operators.contains(operatorAddr), "Operator already exists");
+        require(operators.length() <= MAX_OPERATORS, "Too many operators");
         _addOperator(operatorAddr);
     }
 
