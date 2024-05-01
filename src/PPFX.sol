@@ -21,6 +21,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     address public treasury;
     address public admin;
     address public insurance;
+    address public stargateHook;
     
     address private pendingAdmin;
     EnumerableSet.AddressSet private operators;
@@ -44,7 +45,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     bytes32[] public availableMarkets;
 
     /**
-     * @dev Throws if called by any accoutn other than the Admin
+     * @dev Throws if called by any account other than the Admin
      */
     modifier onlyAdmin {
         require(_msgSender() == admin, "Caller not admin");
@@ -52,10 +53,18 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     }
 
     /**
-     * @dev Throws if called by any accoutn other than the Operator
+     * @dev Throws if called by any account other than the Operator
      */
     modifier onlyOperator {
         require(operators.contains(_msgSender()), "Caller not operator");
+        _;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the Stargate Hook
+     */
+    modifier onlyStargateHook {
+        require(_msgSender() == stargateHook, "Caller not Stargate Hook");
         _;
     }
 
@@ -65,7 +74,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     constructor(
         address _admin, 
         address _treasury, 
-        address _insurance, 
+        address _insurance,
+        address _stargateHook,
         IERC20 usdtAddress,
         uint256 _withdrawalWaitTime,
         uint256 _minimumOrderAmount
@@ -73,6 +83,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
+        _updateStargateHook(_stargateHook);
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
         _updateMinimumOrderAmount(_minimumOrderAmount);
@@ -130,48 +141,51 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     /**
      * @dev Initiate a deposit.
+     * @param user The target address to deposit to
      * @param amount The amount of USDT to deposit
      * 
      * Emits a {UserDeposit} event.
      */
-    function deposit(uint256 amount) external nonReentrant {
+    function deposit(address user, uint256 amount) external onlyStargateHook nonReentrant {
         require(amount > 0, "Invalid amount");
         usdt.safeTransferFrom(_msgSender(), address(this), amount);
-        userFundingBalance[_msgSender()] += amount;
-        emit UserDeposit(_msgSender(), amount);
+        userFundingBalance[user] += amount;
+        emit UserDeposit(user, amount);
     }
 
     /**
      * @dev Initiate a withdrawal.
+     * @param user The target address to withdraw from
      * @param amount The amount of USDT to withdraw
      *
      * Emits a {UserWithdrawal} event.
      *
      */
-    function withdraw(uint256 amount) external nonReentrant {
+    function withdraw(address user, uint256 amount) external onlyStargateHook nonReentrant {
         require(amount > 0, "Invalid amount");
-        require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
-        userFundingBalance[_msgSender()] -= amount;
-        pendingWithdrawalBalance[_msgSender()] += amount;
-        lastWithdrawalTime[_msgSender()] = block.timestamp;
-        emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
+        require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
+        userFundingBalance[user] -= amount;
+        pendingWithdrawalBalance[user] += amount;
+        lastWithdrawalTime[user] = block.timestamp;
+        emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
     }
 
     /**
      * @dev Claim all pending withdrawal
      * Throw if no available pending withdrawal.
+     * @param user The target address to claim pending withdrawal from
      *
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawal() external nonReentrant {
-        uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
+    function claimPendingWithdrawal(address user) external onlyStargateHook nonReentrant {
+        uint256 pendingBal = pendingWithdrawalBalance[user];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.timestamp >= lastWithdrawalTime[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
-        usdt.safeTransfer(_msgSender(), pendingBal);
-        pendingWithdrawalBalance[_msgSender()] = 0;
-        lastWithdrawalTime[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
+        require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        usdt.safeTransfer(user, pendingBal);
+        pendingWithdrawalBalance[user] = 0;
+        lastWithdrawalTime[user] = 0;
+        emit UserClaimedWithdrawal(user, pendingBal, block.timestamp);
     }
 
     /****************************
@@ -743,6 +757,11 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     function _updateAdmin(address adminAddr) internal {
         admin = adminAddr;
         emit NewAdmin(adminAddr);
+    }
+
+    function _updateStargateHook(address stargateHookAddr) internal {
+        stargateHook = stargateHookAddr;
+        emit NewStargateHook(stargateHookAddr);
     }
 
     function _updateTreasury(address treasuryAddr) internal {

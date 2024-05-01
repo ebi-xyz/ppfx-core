@@ -27,6 +27,7 @@ contract PPFXTest is Test {
             address(this),
             treasury,
             insurance,
+            address(this),
             IERC20(address(usdt)),
             5,
             1
@@ -37,7 +38,7 @@ contract PPFXTest is Test {
 
     function test_SuccessDeposit() public {
         usdt.approve(address(ppfx), 1 ether);
-        ppfx.deposit(1 ether);
+        ppfx.deposit(address(this), 1 ether);
         assertEq(ppfx.totalBalance(address(this)), 1 ether);
     }
 
@@ -48,24 +49,22 @@ contract PPFXTest is Test {
 
     function test_SuccessWithdraw() public {
         test_SuccessDeposit();
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         vm.warp(block.timestamp + 5);
         uint256 oldBalance = usdt.balanceOf(address(this));
-        ppfx.claimPendingWithdrawal();
+        ppfx.claimPendingWithdrawal(address(this));
         assertEq(usdt.balanceOf(address(this)), oldBalance + 1 ether);
     }
 
     function test_SuccessLiquidateAndClosePositionSameAmount() public {
         ppfx.addMarket("BTC");
         usdt.approve(address(ppfx), 5000);
-        ppfx.deposit(5000);
+        ppfx.deposit(address(this), 5000);
         usdt.transfer(address(1), 5000);
 
-        vm.startPrank(address(1));
         usdt.approve(address(ppfx), 5000);
-        ppfx.deposit(5000);
-        vm.stopPrank();
+        ppfx.deposit(address(1), 5000);
 
         ppfx.addPosition(address(1), "BTC", 5000, 0);
         ppfx.addPosition(address(this), "BTC", 5000, 0);
@@ -79,13 +78,11 @@ contract PPFXTest is Test {
     function test_SuccessLiquidateAndClosePositionDiffAmount() public {
         ppfx.addMarket("BTC");
         usdt.approve(address(ppfx), 5000);
-        ppfx.deposit(5000);
+        ppfx.deposit(address(this), 5000);
         usdt.transfer(address(1), 5500);
 
-        vm.startPrank(address(1));
         usdt.approve(address(ppfx), 5500);
-        ppfx.deposit(5500);
-        vm.stopPrank();
+        ppfx.deposit(address(1), 5500);
 
         ppfx.addPosition(address(1), "BTC", 5500, 0);
         ppfx.addPosition(address(this), "BTC", 5000, 0);
@@ -98,17 +95,17 @@ contract PPFXTest is Test {
 
     function test_SuccessWithdrawTwice() public {
         usdt.approve(address(ppfx), 2 ether);
-        ppfx.deposit(2 ether);
+        ppfx.deposit(address(this), 2 ether);
         assertEq(ppfx.totalBalance(address(this)), 2 ether);
 
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         vm.warp(block.timestamp + 2);
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
         vm.warp(block.timestamp + 7);
         uint256 oldBalance = usdt.balanceOf(address(this));
-        ppfx.claimPendingWithdrawal();
+        ppfx.claimPendingWithdrawal(address(this));
         assertEq(usdt.balanceOf(address(this)), oldBalance + 2 ether);
     }
 
@@ -147,7 +144,7 @@ contract PPFXTest is Test {
     function test_SuccessWithdrawAllThenAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         ppfx.addPosition(address(this), "BTC", 1 ether - 1, 1);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0);
@@ -158,7 +155,7 @@ contract PPFXTest is Test {
     function test_SuccessWithdrawHalfThenAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
-        ppfx.withdraw(0.5 ether);
+        ppfx.withdraw(address(this), 0.5 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
         ppfx.addPosition(address(this), "BTC", 0.8 ether - 1, 1);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0);
@@ -169,7 +166,7 @@ contract PPFXTest is Test {
     function test_SuccessWithdrawThenAddPositionWithEnoughFundingBalance() public {
         test_SuccessDeposit();
         test_AddMarket();
-        ppfx.withdraw(0.5 ether);
+        ppfx.withdraw(address(this), 0.5 ether);
         ppfx.addPosition(address(this), "BTC", 0.4 ether - 1, 1);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
         assertEq(ppfx.userFundingBalance(address(this)), 0.1 ether);
@@ -188,10 +185,8 @@ contract PPFXTest is Test {
     function test_2ndAddrSuccessAddPosition() public {
         usdt.transfer(address(1), 1 ether);
 
-        vm.startPrank(address(1));
         usdt.approve(address(ppfx), 1 ether);
-        ppfx.deposit(1 ether);
-        vm.stopPrank();
+        ppfx.deposit(address(1), 1 ether);
 
         if (!ppfx.marketExists(keccak256(bytes("BTC")))) {
             test_AddMarket();
@@ -428,7 +423,7 @@ contract PPFXTest is Test {
         test_SuccessAddPosition();
         
         usdt.approve(address(ppfx), 1 ether);
-        ppfx.deposit(1 ether);
+        ppfx.deposit(address(this), 1 ether);
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
 
         ppfx.addCollateral(address(this), "BTC", 1 ether);
@@ -544,27 +539,27 @@ contract PPFXTest is Test {
 
     function test_Fail_DepositZero() public {
         vm.expectRevert(bytes("Invalid amount"));
-        ppfx.deposit(0);
+        ppfx.deposit(address(this), 0);
     }
 
     function test_Fail_NoAllowanceDeposit() public {
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(ppfx), 0, 1 ether));
-        ppfx.deposit(1 ether);
+        ppfx.deposit(address(this), 1 ether);
     }
 
     function test_Fail_NoAllowanceDepositMax() public {
         vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(ppfx), 0, 2**256-1));
-        ppfx.deposit(2**256-1);
+        ppfx.deposit(address(this), 2**256-1);
     }
 
     function test_Fail_withdrawMax() public {
         vm.expectRevert(bytes("Insufficient balance from funding account"));
-        ppfx.withdraw(2**256-1);
+        ppfx.withdraw(address(this), 2**256-1);
     }
 
     function test_Fail_withdrawZero() public {
         vm.expectRevert(bytes("Invalid amount"));
-        ppfx.withdraw(0);
+        ppfx.withdraw(address(this), 0);
     }
 
     function test_Fail_UpdateInvalidWithdrawalBlockTime() public {
@@ -574,32 +569,32 @@ contract PPFXTest is Test {
 
     function test_Fail_WithdrawBeforeAvailable() public {
         test_SuccessDeposit();
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         vm.warp(block.timestamp + 2);
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
-        ppfx.claimPendingWithdrawal();
+        ppfx.claimPendingWithdrawal(address(this));
     }
 
     function test_Fail_WithdrawTwiceBeforeAvailable() public {
         usdt.approve(address(ppfx), 2 ether);
-        ppfx.deposit(2 ether);
+        ppfx.deposit(address(this), 2 ether);
         assertEq(ppfx.totalBalance(address(this)), 2 ether);
 
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         vm.warp(block.timestamp + 2);
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 2 ether);
         vm.warp(block.timestamp + 4);
         vm.expectRevert(bytes("No available pending withdrawal to claim"));
-        ppfx.claimPendingWithdrawal();
+        ppfx.claimPendingWithdrawal(address(this));
     }
 
     function test_Fail_WithdrawAllThenAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
-        ppfx.withdraw(1 ether);
+        ppfx.withdraw(address(this), 1 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 1 ether);
         vm.expectRevert(bytes("Insufficient funding balance to add position"));
         ppfx.addPosition(address(this), "BTC", 1 ether, 1);
@@ -608,7 +603,7 @@ contract PPFXTest is Test {
     function test_Fail_WithdrawHalfThenAddPosition() public {
         test_SuccessDeposit();
         test_AddMarket();
-        ppfx.withdraw(0.5 ether);
+        ppfx.withdraw(address(this), 0.5 ether);
         assertEq(ppfx.pendingWithdrawalBalance(address(this)), 0.5 ether);
         vm.expectRevert(bytes("Insufficient funding balance to add position"));
         ppfx.addPosition(address(this), "BTC", 1 ether, 1);
