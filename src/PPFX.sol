@@ -74,14 +74,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     }
 
     /**
-     * @dev Throws if called by any account other than the Stargate Hook
-     */
-    modifier onlyStargateHook {
-        require(_msgSender() == stargateHook, "Caller not Stargate Hook");
-        _;
-    }
-
-    /**
      * @dev Initializes the contract with the info provided by the developer as the initial operator.
      */
     constructor(
