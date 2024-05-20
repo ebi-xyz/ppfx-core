@@ -72,21 +72,36 @@ interface IPPFX {
 
     /**
      * @dev Initiate a deposit.
-     * @param user The target address to deposit to
      * @param amount The amount of USDT to deposit
      */
-    function deposit(address user, uint256 amount) external;
+    function deposit(uint256 amount) external;
 
     /**
      * @dev Initiate a withdrawal.
-     * @param user The target address to withdraw from
      * @param amount The amount of USDT to withdraw
      */
-    function withdraw(address user, uint256 amount) external;
+    function withdraw(uint256 amount) external;
 
     /**
      * @dev Claim all pending withdrawal
-     * @param user The target address to claim pending withdrawal from
      */
-    function claimPendingWithdrawal(address user) external;
+    function claimPendingWithdrawal() external;
+
+     /**
+     * @dev Initiate a withdrawal for user.
+     * @param delegate The delegated address to initiate the withdrawal
+     * @param user The target address to withdraw from
+     * @param amount The amount of USDT to withdraw
+     * @param signature Signature from the user
+     */
+    function withdrawForUser(address delegate, address user, uint256 amount, bytes calldata signature) external;
+
+    /**
+     * @dev Claim all pending withdrawal for target user
+     * Throw if no available pending withdrawal / invalid signature
+     * @param delegate The delegated address to claim pending withdrawal
+     * @param user The target address to claim pending withdrawal from
+     * @param signature Signature from the user
+     */
+    function claimPendingWithdrawalForUser(address delegate, address user, bytes calldata signature) external;
 }
