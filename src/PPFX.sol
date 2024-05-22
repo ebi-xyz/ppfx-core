@@ -20,12 +20,13 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
-    uint256 private constant VALID_DATA_OFFSET = 20;
-    uint256 private constant SIGNATURE_OFFSET = 180;
-    uint256 private constant SIG_VALID_FOR_SEC = 120;
+    uint256 public constant VALID_DATA_OFFSET = 20;
+    uint256 public constant CLAIM_SIGNATURE_OFFSET = 180;
+    uint256 public constant WITHDRAW_SIGNATURE_OFFSET = 212;
+    uint256 public constant SIG_VALID_FOR_SEC = 120;
 
-    bytes4 public constant WITHDRAW_SELECTOR = bytes4(keccak256("withdrawForUser(bytes)"));
-    bytes4 public constant CLAIM_SELECTOR = bytes4(keccak256("claimWithdrawalForUser(bytes)"));
+    bytes4 public constant WITHDRAW_SELECTOR = bytes4(keccak256("withdrawForUser(address,address,uint256,bytes)"));
+    bytes4 public constant CLAIM_SELECTOR = bytes4(keccak256("claimPendingWithdrawalForUser(address,address,bytes)"));
 
     mapping(address => uint256) public userNonce;
 
@@ -34,7 +35,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     address public treasury;
     address public admin;
     address public insurance;
-    address public stargateHook;
     
     address private pendingAdmin;
     EnumerableSet.AddressSet private operators;
@@ -80,7 +80,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         address _admin, 
         address _treasury, 
         address _insurance,
-        address _stargateHook,
         IERC20 usdtAddress,
         uint256 _withdrawalWaitTime,
         uint256 _minimumOrderAmount
@@ -88,7 +87,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
-        _updateStargateHook(_stargateHook);
         _updateUsdt(usdtAddress);
         _updateWithdrawalWaitTime(_withdrawalWaitTime);
         _updateMinimumOrderAmount(_minimumOrderAmount);
@@ -155,6 +153,20 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         usdt.safeTransferFrom(_msgSender(), address(this), amount);
         userFundingBalance[_msgSender()] += amount;
         emit UserDeposit(_msgSender(), amount);
+    }
+
+    /**
+     * @dev Initiate a deposit for user.
+     * @param user The User to deposit to
+     * @param amount The amount of USDT to deposit
+     * 
+     * Emits a {UserDeposit} event.
+     */
+    function depositForUser(address user, uint256 amount) external nonReentrant {
+        require(amount > 0, "Invalid amount");
+        usdt.safeTransferFrom(_msgSender(), address(this), amount);
+        userFundingBalance[user] += amount;
+        emit UserDeposit(user, amount);
     }
 
     /**
@@ -804,11 +816,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit NewAdmin(adminAddr);
     }
 
-    function _updateStargateHook(address stargateHookAddr) internal {
-        stargateHook = stargateHookAddr;
-        emit NewStargateHook(stargateHookAddr);
-    }
-
     function _updateTreasury(address treasuryAddr) internal {
         treasury = treasuryAddr;
         emit NewTreasury(treasuryAddr);
@@ -885,6 +892,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function validateWithdrawSig(bytes calldata data) public view returns (bool, address, address, uint256){
         (
+            address ppfxAddr,
             address user,
             address delegate,
             uint256 amount,
@@ -896,8 +904,10 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         // solhint-disable-next-line reason-string
         require(
             signature.length == 64 || signature.length == 65,
-            "PPFXStargateHook: invalid signature length in data"
+            "PPFX: invalid signature length in data"
         );
+
+        require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
 
         bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getWithdrawHash(user, delegate, amount, nonce, methodID, signedAt));
         bool valid = nonce == userNonce[user] &&
@@ -911,6 +921,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     function validateClaimSig(bytes calldata data) public view returns (bool, address, address){
         (
+            address ppfxAddr,
             address user,
             address delegate,
             uint256 nonce,
@@ -921,8 +932,10 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         // solhint-disable-next-line reason-string
         require(
             signature.length == 64 || signature.length == 65,
-            "PPFXStargateHook: invalid signature length in data"
+            "PPFX: invalid signature length in data"
         );
+
+        require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
 
         bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getClaimHash(user, delegate, nonce, methodID, signedAt));
         bool valid = nonce == userNonce[user] &&
@@ -938,6 +951,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         public
         pure
         returns (
+            address ppfxAddr,
             address user,
             address delegate,
             uint256 amount,
@@ -947,17 +961,19 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             bytes calldata signature
         )
     {
+        ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
         (user, delegate, amount, nonce, methodID, signedAt) = abi.decode(
-            data[VALID_DATA_OFFSET:SIGNATURE_OFFSET],
+            data[VALID_DATA_OFFSET:WITHDRAW_SIGNATURE_OFFSET],
             (address, address, uint256, uint256, bytes4, uint48)
         );
-        signature = data[SIGNATURE_OFFSET:];
+        signature = data[WITHDRAW_SIGNATURE_OFFSET:];
     }
 
     function parseClaimData(bytes calldata data) 
         public
         pure
         returns (
+            address ppfxAddr,
             address user,
             address delegate,
             uint256 nonce,
@@ -966,10 +982,11 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             bytes calldata signature
         )
     {
+        ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
         (user, delegate, nonce, methodID, signedAt) = abi.decode(
-            data[VALID_DATA_OFFSET:SIGNATURE_OFFSET],
+            data[VALID_DATA_OFFSET:CLAIM_SIGNATURE_OFFSET],
             (address, address, uint256, bytes4, uint48)
         );
-        signature = data[SIGNATURE_OFFSET:];
+        signature = data[CLAIM_SIGNATURE_OFFSET:];
     }
 }

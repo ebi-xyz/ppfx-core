@@ -17,7 +17,6 @@ contract PPFXScript is Script {
     function run() public {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployerAddr = vm.addr(deployerKey);
-        address stargateHookAddr = vm.envAddress("STARGATE_HOOK");
 
         vm.startBroadcast(deployerKey);
 
@@ -27,7 +26,6 @@ contract PPFXScript is Script {
             deployerAddr,
             deployerAddr,
             deployerAddr,
-            stargateHookAddr,
             IERC20(address(usdt)),
             5,
             1

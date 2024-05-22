@@ -7,6 +7,7 @@ import {IPPFX} from "../src/IPPFX.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract USDT is ERC20 {
     constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {
@@ -15,10 +16,16 @@ contract USDT is ERC20 {
 }
 
 contract PPFXTest is Test {
+    using MessageHashUtils for bytes32;
+    
     PPFX public ppfx;
     USDT public usdt;
     address public treasury = address(123400);
     address public insurance = address(1234500);
+
+    uint256 internal userPrivateKey;
+    uint256 internal signerPrivateKey;
+    address internal signerAddr;
 
     function setUp() public {
         usdt = new USDT("USDT", "USDT");
@@ -27,13 +34,16 @@ contract PPFXTest is Test {
             address(this),
             treasury,
             insurance,
-            address(this),
             IERC20(address(usdt)),
             5,
             1
         );
 
         ppfx.addOperator(address(this));
+
+        userPrivateKey = 0xa11ce;
+        signerPrivateKey = 0xabc123;
+        signerAddr = vm.addr(signerPrivateKey);
     }
 
     function test_SuccessDeposit() public {
@@ -532,6 +542,55 @@ contract PPFXTest is Test {
         ppfx.bulkProcessFunctions(bs);
 
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
+    }
+
+    // function test_ValidClaimSignature() public {
+
+    // }
+
+    function test_ValidWithdrawSignature() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+        
+        uint48 signedAt = uint48(block.timestamp);
+
+        bytes32 withdrawHash = ppfx.getWithdrawHash(
+            signerAddr,
+            address(this),
+            1 ether,
+            ppfx.userNonce(signerAddr),
+            ppfx.WITHDRAW_SELECTOR(),
+            signedAt
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                withdrawHash
+            )
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes memory data = abi.encodePacked(
+            signerAddr,
+            address(this),
+            ppfx.userNonce(signerAddr),
+            ppfx.WITHDRAW_SELECTOR(),
+            signedAt
+        );
+
+        bytes memory packedDataAndSig = abi.encodePacked(address(ppfx), data, signature);
+
+        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, packedDataAndSig);
     }
 
     function test_Fail_TooManyOperators() public {

@@ -17,7 +17,6 @@ interface IPPFX {
     event NewWithdrawalWaitTime(uint256 newWaitTime);
     event NewMinimumOrderAmount(uint256 newMinOrderAmt);
     event TransferAdmin(address indexed newAdminAddress);
-    event NewStargateHook(address indexed newStargateHook);
 
     event UserDeposit(address indexed user, uint256 amount);
     event UserWithdrawal(address indexed user, uint256 amount, uint256 availableAt);
@@ -87,7 +86,14 @@ interface IPPFX {
      */
     function claimPendingWithdrawal() external;
 
-     /**
+    /**
+     * @dev Initiate a deposit for user.
+     * @param user The target address to deposit to
+     * @param amount The amount of USDT to deposit
+     */
+    function depositForUser(address user, uint256 amount) external;
+
+    /**
      * @dev Initiate a withdrawal for user.
      * @param delegate The delegated address to initiate the withdrawal
      * @param user The target address to withdraw from
