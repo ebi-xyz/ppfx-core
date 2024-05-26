@@ -40,6 +40,8 @@ interface IPPFX {
     event BulkProcessFailedTxSelectorNotFound(uint256 indexed txIndex, bytes4 methodID);
     event BulkProcessFailedTxReverted(uint256 indexed txIndex, bytes data);
 
+    event WithdrawalBalanceReduced(address indexed user, uint256 amount);
+
     /**
      * @dev Get Sender total trading balance.
      * @return Sum of sender's trading balance across all available markets.

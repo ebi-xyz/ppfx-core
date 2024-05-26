@@ -579,6 +579,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 // reset the withdrawal countdown
                 pendingWithdrawalBalance[user] -= amount;
                 lastWithdrawalTime[user] = block.timestamp;
+                emit WithdrawalBalanceReduced(user, amount);
             } else { // `amount` is >= pending withdrawal balance
                 // Clear pending withdrawal balance
                 uint256 remaining = amount - pendingWithdrawalBalance[user];
