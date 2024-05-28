@@ -560,12 +560,14 @@ contract PPFXTest is Test {
         vm.stopPrank();
         
         uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 1 ether;
+        uint256 nonce = ppfx.userNonce(signerAddr);
 
         bytes32 withdrawHash = ppfx.getWithdrawHash(
             signerAddr,
             address(this),
-            1 ether,
-            ppfx.userNonce(signerAddr),
+            withdrawAmount,
+            nonce,
             ppfx.WITHDRAW_SELECTOR(),
             signedAt
         );
@@ -583,14 +585,17 @@ contract PPFXTest is Test {
         bytes memory data = abi.encodePacked(
             signerAddr,
             address(this),
-            ppfx.userNonce(signerAddr),
+            withdrawAmount,
+            nonce,
             ppfx.WITHDRAW_SELECTOR(),
             signedAt
         );
 
-        bytes memory packedDataAndSig = abi.encodePacked(address(ppfx), data, signature);
+        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
 
-        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, packedDataAndSig);
+        bytes memory out = abi.encode(packedPpfx, data, signature);
+
+        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
     }
 
     function test_Fail_TooManyOperators() public {
