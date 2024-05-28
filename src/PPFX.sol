@@ -914,7 +914,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getWithdrawHash(user, delegate, amount, nonce, methodID, signedAt));
         bool valid = nonce == userNonce[user] &&
-            signedAt >= block.timestamp &&
             block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
             methodID == WITHDRAW_SELECTOR &&
             user == ECDSA.recover(hash, signature);
@@ -942,7 +941,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getClaimHash(user, delegate, nonce, methodID, signedAt));
         bool valid = nonce == userNonce[user] &&
-            signedAt >= block.timestamp &&
             block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
             methodID == CLAIM_SELECTOR && 
             user == ECDSA.recover(hash, signature);
