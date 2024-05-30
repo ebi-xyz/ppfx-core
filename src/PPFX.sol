@@ -203,7 +203,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         userFundingBalance[user] -= amount;
         pendingWithdrawalBalance[user] += amount;
         lastWithdrawalTime[user] = block.timestamp;
-        userNonce[user] += 1;
         emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
     }
 
@@ -243,7 +242,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         usdt.safeTransfer(delegate, pendingBal);
         pendingWithdrawalBalance[user] = 0;
         lastWithdrawalTime[user] = 0;
-        userNonce[user] += 1;
         emit UserClaimedWithdrawal(user, pendingBal, block.timestamp);
     }
 
