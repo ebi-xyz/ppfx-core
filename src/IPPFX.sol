@@ -40,6 +40,8 @@ interface IPPFX {
     event BulkProcessFailedTxSelectorNotFound(uint256 indexed txIndex, bytes4 methodID);
     event BulkProcessFailedTxReverted(uint256 indexed txIndex, bytes data);
 
+    event WithdrawalBalanceReduced(address indexed user, uint256 amount);
+
     /**
      * @dev Get Sender total trading balance.
      * @return Sum of sender's trading balance across all available markets.
@@ -85,4 +87,29 @@ interface IPPFX {
      * @dev Claim all pending withdrawal
      */
     function claimPendingWithdrawal() external;
+
+    /**
+     * @dev Initiate a deposit for user.
+     * @param user The target address to deposit to
+     * @param amount The amount of USDT to deposit
+     */
+    function depositForUser(address user, uint256 amount) external;
+
+    /**
+     * @dev Initiate a withdrawal for user.
+     * @param delegate The delegated address to initiate the withdrawal
+     * @param user The target address to withdraw from
+     * @param amount The amount of USDT to withdraw
+     * @param signature Signature from the user
+     */
+    function withdrawForUser(address delegate, address user, uint256 amount, bytes calldata signature) external;
+
+    /**
+     * @dev Claim all pending withdrawal for target user
+     * Throw if no available pending withdrawal / invalid signature
+     * @param delegate The delegated address to claim pending withdrawal
+     * @param user The target address to claim pending withdrawal from
+     * @param signature Signature from the user
+     */
+    function claimPendingWithdrawalForUser(address delegate, address user, bytes calldata signature) external;
 }
