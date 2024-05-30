@@ -7,6 +7,8 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IPPFX} from "./IPPFX.sol";
 
 
@@ -15,6 +17,18 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     using Math for uint256;
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
+
+    uint256 public constant VALID_DATA_OFFSET = 20;
+    uint256 public constant CLAIM_SIGNATURE_OFFSET = 180;
+    uint256 public constant WITHDRAW_SIGNATURE_OFFSET = 212;
+    uint256 public constant SIG_VALID_FOR_SEC = 120;
+
+    bytes4 public constant WITHDRAW_SELECTOR = bytes4(keccak256("withdrawForUser(address,address,uint256,bytes)"));
+    bytes4 public constant CLAIM_SELECTOR = bytes4(keccak256("claimPendingWithdrawalForUser(address,address,bytes)"));
+
+    mapping(address => uint256) public userNonce;
 
     uint256 constant public MAX_OPERATORS = 25;
 
@@ -44,7 +58,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     bytes32[] public availableMarkets;
 
     /**
-     * @dev Throws if called by any accoutn other than the Admin
+     * @dev Throws if called by any account other than the Admin
      */
     modifier onlyAdmin {
         require(_msgSender() == admin, "Caller not admin");
@@ -52,7 +66,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     }
 
     /**
-     * @dev Throws if called by any accoutn other than the Operator
+     * @dev Throws if called by any account other than the Operator
      */
     modifier onlyOperator {
         require(operators.contains(_msgSender()), "Caller not operator");
@@ -65,7 +79,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     constructor(
         address _admin, 
         address _treasury, 
-        address _insurance, 
+        address _insurance,
         IERC20 usdtAddress,
         uint256 _withdrawalWaitTime,
         uint256 _minimumOrderAmount
@@ -142,6 +156,20 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     }
 
     /**
+     * @dev Initiate a deposit for user.
+     * @param user The User to deposit to
+     * @param amount The amount of USDT to deposit
+     * 
+     * Emits a {UserDeposit} event.
+     */
+    function depositForUser(address user, uint256 amount) external nonReentrant {
+        require(amount > 0, "Invalid amount");
+        usdt.safeTransferFrom(_msgSender(), address(this), amount);
+        userFundingBalance[user] += amount;
+        emit UserDeposit(user, amount);
+    }
+
+    /**
      * @dev Initiate a withdrawal.
      * @param amount The amount of USDT to withdraw
      *
@@ -155,6 +183,27 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         pendingWithdrawalBalance[_msgSender()] += amount;
         lastWithdrawalTime[_msgSender()] = block.timestamp;
         emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
+    }
+
+    /**
+     * @dev Initiate a withdrawal for user.
+     * @param delegate The delegated address to initiate the withdrawal
+     * @param user The target address to withdraw from
+     * @param amount The amount of USDT to withdraw
+     * @param signature Signature from the user
+     *
+     * Emits a {UserWithdrawal} event.
+     *
+     */
+    function withdrawForUser(address delegate, address user, uint256 amount, bytes calldata signature) external nonReentrant {
+        require(amount > 0, "Invalid amount");
+        require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
+        (bool valid, address fromUser, address toUser, uint256 sigAmount) = validateWithdrawSig(signature);
+        require(valid && fromUser == user && toUser == delegate && amount == sigAmount, "Invalid Signature");
+        userFundingBalance[user] -= amount;
+        pendingWithdrawalBalance[user] += amount;
+        lastWithdrawalTime[user] = block.timestamp;
+        emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
     }
 
     /**
@@ -172,6 +221,28 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         pendingWithdrawalBalance[_msgSender()] = 0;
         lastWithdrawalTime[_msgSender()] = 0;
         emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
+    }
+
+    /**
+     * @dev Claim all pending withdrawal for target user
+     * Throw if no available pending withdrawal / invalid signature
+     * @param delegate The delegated address to claim pending withdrawal
+     * @param user The target address to claim pending withdrawal from
+     * @param signature Signature from the user
+     *
+     * Emits a {UserClaimedWithdrawal} event.
+     *
+     */
+    function claimPendingWithdrawalForUser(address delegate, address user, bytes calldata signature) external nonReentrant {
+        uint256 pendingBal = pendingWithdrawalBalance[user];
+        require(pendingBal > 0, "Insufficient pending withdrawal balance");
+        require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        (bool valid, address fromUser, address toUser) = validateClaimSig(signature);
+        require(valid && fromUser == user && toUser == delegate, "Invalid Signature");
+        usdt.safeTransfer(delegate, pendingBal);
+        pendingWithdrawalBalance[user] = 0;
+        lastWithdrawalTime[user] = 0;
+        emit UserClaimedWithdrawal(user, pendingBal, block.timestamp);
     }
 
     /****************************
@@ -579,9 +650,11 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 // reset the withdrawal countdown
                 pendingWithdrawalBalance[user] -= amount;
                 lastWithdrawalTime[user] = block.timestamp;
+                emit WithdrawalBalanceReduced(user, amount);
             } else { // `amount` is >= pending withdrawal balance
                 // Clear pending withdrawal balance
-                uint256 remaining = amount - pendingWithdrawalBalance[user];
+                uint256 pendingBal = pendingWithdrawalBalance[user];
+                uint256 remaining = amount - pendingBal;
                 pendingWithdrawalBalance[user] = 0;
                 lastWithdrawalTime[user] = 0;
 
@@ -589,6 +662,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
                 if (remaining > 0) {
                     userFundingBalance[user] -= remaining;
                 }
+                emit WithdrawalBalanceReduced(user, pendingBal);
             }
         }
     }
@@ -790,4 +864,130 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit NewMinimumOrderAmount(newMinOrderAmt);
     }
     
+    /*************************************************
+     * Functions for signing & validating signatures *
+     *************************************************/
+
+    function getWithdrawHash(
+        address user,
+        address delegate,
+        uint256 amount,
+        uint256 nonce,
+        bytes4 methodID,
+        uint48 signedAt
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encode(user, delegate, nonce, block.chainid, methodID, amount, signedAt)
+        );
+    }
+
+    function getClaimHash(
+        address user,
+        address delegate,
+        uint256 nonce,
+        bytes4 methodID,
+        uint48 signedAt
+    ) public view returns (bytes32) {
+        return keccak256(
+            abi.encode(user, delegate, nonce, block.chainid, methodID, signedAt)
+        );
+    }
+
+    function validateWithdrawSig(bytes calldata data) public view returns (bool, address, address, uint256){
+        (
+            address ppfxAddr,
+            address user,
+            address delegate,
+            uint256 amount,
+            uint256 nonce,
+            bytes4 methodID,
+            uint48 signedAt,
+            bytes calldata signature
+        ) = parseWithdrawData(data);
+        // solhint-disable-next-line reason-string
+        require(
+            signature.length == 64 || signature.length == 65,
+            "PPFX: invalid signature length in data"
+        );
+
+        require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
+
+        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getWithdrawHash(user, delegate, amount, nonce, methodID, signedAt));
+        bool valid = nonce == userNonce[user] &&
+            block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
+            methodID == WITHDRAW_SELECTOR &&
+            user == ECDSA.recover(hash, signature);
+
+        return (valid, user, delegate, amount);
+    }
+
+    function validateClaimSig(bytes calldata data) public view returns (bool, address, address){
+        (
+            address ppfxAddr,
+            address user,
+            address delegate,
+            uint256 nonce,
+            bytes4 methodID,
+            uint48 signedAt,
+            bytes calldata signature
+        ) = parseClaimData(data);
+        // solhint-disable-next-line reason-string
+        require(
+            signature.length == 64 || signature.length == 65,
+            "PPFX: invalid signature length in data"
+        );
+
+        require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
+
+        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getClaimHash(user, delegate, nonce, methodID, signedAt));
+        bool valid = nonce == userNonce[user] &&
+            block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
+            methodID == CLAIM_SELECTOR && 
+            user == ECDSA.recover(hash, signature);
+
+        return (valid, user, delegate);
+    }
+
+    function parseWithdrawData(bytes calldata data) 
+        public
+        pure
+        returns (
+            address ppfxAddr,
+            address user,
+            address delegate,
+            uint256 amount,
+            uint256 nonce,
+            bytes4 methodID,
+            uint48 signedAt,
+            bytes calldata signature
+        )
+    {
+        ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
+        (user, delegate, amount, nonce, methodID, signedAt) = abi.decode(
+            data[VALID_DATA_OFFSET:WITHDRAW_SIGNATURE_OFFSET],
+            (address, address, uint256, uint256, bytes4, uint48)
+        );
+        signature = data[WITHDRAW_SIGNATURE_OFFSET:];
+    }
+
+    function parseClaimData(bytes calldata data) 
+        public
+        pure
+        returns (
+            address ppfxAddr,
+            address user,
+            address delegate,
+            uint256 nonce,
+            bytes4 methodID,
+            uint48 signedAt,
+            bytes calldata signature
+        )
+    {
+        ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
+        (user, delegate, nonce, methodID, signedAt) = abi.decode(
+            data[VALID_DATA_OFFSET:CLAIM_SIGNATURE_OFFSET],
+            (address, address, uint256, bytes4, uint48)
+        );
+        signature = data[CLAIM_SIGNATURE_OFFSET:];
+    }
 }
