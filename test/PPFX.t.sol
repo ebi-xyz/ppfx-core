@@ -7,6 +7,7 @@ import {IPPFX} from "../src/IPPFX.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract USDT is ERC20 {
     constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {
@@ -15,10 +16,16 @@ contract USDT is ERC20 {
 }
 
 contract PPFXTest is Test {
+    using MessageHashUtils for bytes32;
+    
     PPFX public ppfx;
     USDT public usdt;
     address public treasury = address(123400);
     address public insurance = address(1234500);
+
+    uint256 internal userPrivateKey;
+    uint256 internal signerPrivateKey;
+    address internal signerAddr;
 
     function setUp() public {
         usdt = new USDT("USDT", "USDT");
@@ -33,6 +40,10 @@ contract PPFXTest is Test {
         );
 
         ppfx.addOperator(address(this));
+
+        userPrivateKey = 0xa11ce;
+        signerPrivateKey = 0xabc123;
+        signerAddr = vm.addr(signerPrivateKey);
     }
 
     function test_SuccessDeposit() public {
@@ -533,6 +544,63 @@ contract PPFXTest is Test {
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
     }
 
+    function test_SuccessDepositForUser() public {
+        assertEq(ppfx.totalBalance(signerAddr), 0);
+        uint256 usdtBalBefore = usdt.balanceOf(address(this));
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.depositForUser(signerAddr, 1 ether);
+        assertEq(usdt.balanceOf(address(this)), usdtBalBefore - 1 ether);
+        assertEq(ppfx.totalBalance(signerAddr), 1 ether);
+    }
+
+    function test_SuccessWithdrawForUser() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+        
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 1 ether;
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+
+        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
+    }
+
+    function test_SuccessClaimForUser() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(1 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
+        vm.warp(block.timestamp + 5);
+        
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes memory out = createClaimData(address(this), signedAt, nonce);
+
+        uint256 usdtBalBeforeClaim = usdt.balanceOf(address(this));
+
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+
+        assertEq(ppfx.totalBalance(signerAddr), 0);
+        assertEq(usdt.balanceOf(address(this)), usdtBalBeforeClaim + 1 ether);
+    }
+
     function test_Fail_TooManyOperators() public {
         uint256 max = ppfx.MAX_OPERATORS() + 1;
         for (uint i = 1; i < max; i++) {
@@ -873,5 +941,320 @@ contract PPFXTest is Test {
         vm.startPrank(address(5));
         vm.expectRevert(bytes("Caller not pendingAdmin"));
         ppfx.acceptAdmin();
+    }
+
+    function test_Fail_WithdrawForUser_Expired() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + ppfx.SIG_VALID_FOR_SEC() * 2);
+        
+        uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
+        uint256 withdrawAmount = 1 ether;
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
+    }
+
+    function test_Fail_ClaimForUser_Expired() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(1 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
+        vm.warp(block.timestamp + 5);
+
+        vm.warp(block.timestamp + ppfx.SIG_VALID_FOR_SEC() * 2);
+
+        uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes memory out = createClaimData(address(this), signedAt, nonce);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+    }
+
+    function test_Fail_WithdrawForUser_NotDelegate() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 1 ether;
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        // Delegate in signature is `signedAddr`, but in function call it is `address(1)`
+        ppfx.withdrawForUser(address(1), signerAddr, 1 ether, out);
+    }
+
+    function test_Fail_ClaimForUser_NotDelegate() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(1 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
+        vm.warp(block.timestamp + 5);
+
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes memory out = createClaimData(address(this), signedAt, nonce);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        // Delegate in signature is `signedAddr`, but in function call it is `address(1)`
+        ppfx.claimPendingWithdrawalForUser(address(1), signerAddr, out);
+    }
+
+    function test_Fail_WithdrawForUser_MismatchNonce() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 1 ether;
+        uint256 nonce = 123;
+
+        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
+    }
+
+    function test_Fail_ClaimForUser_MismatchNonce() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(1 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
+        vm.warp(block.timestamp + 5);
+
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 nonce = 123;
+
+        bytes memory out = createClaimData(address(this), signedAt, nonce);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+    }
+
+    function test_Fail_WithdrawForUser_SignedByAnotherUser() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 1 ether;
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes32 withdrawHash = ppfx.getWithdrawHash(
+            signerAddr,
+            address(this),
+            withdrawAmount,
+            nonce,
+            ppfx.WITHDRAW_SELECTOR(),
+            signedAt
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                withdrawHash
+            )
+        );
+
+        // Supposed to be signed by `signerPrivateKey`
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes memory data = abi.encode(
+            signerAddr,
+            address(this),
+            withdrawAmount,
+            nonce,
+            ppfx.WITHDRAW_SELECTOR(),
+            signedAt
+        );
+
+        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
+        bytes memory out = abi.encodePacked(packedPpfx, data, signature);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
+    }
+
+    function test_Fail_ClaimForUser_SignedByAnotherUser() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(1 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
+        vm.warp(block.timestamp + 5);
+
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 nonce = ppfx.userNonce(signerAddr);
+
+        bytes32 claimHash = ppfx.getClaimHash(
+            signerAddr,
+            address(this),
+            nonce,
+            ppfx.CLAIM_SELECTOR(),
+            signedAt
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                claimHash
+            )
+        );
+
+        // Supposed to be signed by `signerPrivateKey`
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes memory data = abi.encode(
+            signerAddr,
+            address(this),
+            nonce,
+            ppfx.CLAIM_SELECTOR(),
+            signedAt
+        );
+
+        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
+        bytes memory out = abi.encodePacked(packedPpfx, data, signature);
+
+        vm.expectRevert(bytes("Invalid Signature"));
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+    }
+
+    // Internal function for creating the data & signature //
+
+    function createWithdrawData(
+        address delegate,
+        uint48 signedAt,
+        uint256 nonce,
+        uint256 withdrawAmount
+    ) internal view returns (bytes memory) {
+        bytes32 withdrawHash = ppfx.getWithdrawHash(
+            signerAddr,
+            delegate,
+            withdrawAmount,
+            nonce,
+            ppfx.WITHDRAW_SELECTOR(),
+            signedAt
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                withdrawHash
+            )
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes memory data = abi.encode(
+            signerAddr,
+            delegate,
+            withdrawAmount,
+            nonce,
+            ppfx.WITHDRAW_SELECTOR(),
+            signedAt
+        );
+
+        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
+        return abi.encodePacked(packedPpfx, data, signature);
+    }
+
+    function createClaimData(
+        address delegate,
+        uint48 signedAt,
+        uint256 nonce
+    ) internal view returns (bytes memory) {
+        bytes32 claimHash = ppfx.getClaimHash(
+            signerAddr,
+            delegate,
+            nonce,
+            ppfx.CLAIM_SELECTOR(),
+            signedAt
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19Ethereum Signed Message:\n32",
+                claimHash
+            )
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes memory data = abi.encode(
+            signerAddr,
+            delegate,
+            nonce,
+            ppfx.CLAIM_SELECTOR(),
+            signedAt
+        );
+
+        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
+        return abi.encodePacked(packedPpfx, data, signature);
     }
 }
