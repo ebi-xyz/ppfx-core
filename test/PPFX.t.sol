@@ -544,10 +544,6 @@ contract PPFXTest is Test {
         assertEq(ppfx.userFundingBalance(address(this)), 1 ether);
     }
 
-    // function test_ValidClaimSignature() public {
-
-    // }
-
     function test_ValidWithdrawSignature() public {
         
         // Transfer USDT from this address to address 1
@@ -582,7 +578,7 @@ contract PPFXTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes memory data = abi.encodePacked(
+        bytes memory data = abi.encode(
             signerAddr,
             address(this),
             withdrawAmount,
@@ -592,10 +588,9 @@ contract PPFXTest is Test {
         );
 
         bytes memory packedPpfx = abi.encodePacked(address(ppfx));
-
-        bytes memory out = abi.encode(packedPpfx, data, signature);
-
+        bytes memory out = abi.encodePacked(packedPpfx, data, signature);
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
     }
 
     function test_Fail_TooManyOperators() public {
