@@ -566,9 +566,8 @@ contract PPFXTest is Test {
         
         uint48 signedAt = uint48(block.timestamp);
         uint256 withdrawAmount = 1 ether;
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
-        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+        bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
 
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
         assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
@@ -589,9 +588,8 @@ contract PPFXTest is Test {
         vm.warp(block.timestamp + 5);
         
         uint48 signedAt = uint48(block.timestamp);
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
-        bytes memory out = createClaimData(address(this), signedAt, nonce);
+        bytes memory out = createClaimData(address(this), signedAt);
 
         uint256 usdtBalBeforeClaim = usdt.balanceOf(address(this));
 
@@ -958,9 +956,8 @@ contract PPFXTest is Test {
         
         uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
         uint256 withdrawAmount = 1 ether;
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
-        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+        bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
 
         vm.expectRevert(bytes("Invalid Signature"));
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
@@ -983,9 +980,8 @@ contract PPFXTest is Test {
         vm.warp(block.timestamp + ppfx.SIG_VALID_FOR_SEC() * 2);
 
         uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
-        bytes memory out = createClaimData(address(this), signedAt, nonce);
+        bytes memory out = createClaimData(address(this), signedAt);
 
         vm.expectRevert(bytes("Invalid Signature"));
         ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
@@ -1004,9 +1000,8 @@ contract PPFXTest is Test {
 
         uint48 signedAt = uint48(block.timestamp);
         uint256 withdrawAmount = 1 ether;
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
-        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
+        bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
 
         vm.expectRevert(bytes("Invalid Signature"));
         // Delegate in signature is `signedAddr`, but in function call it is `address(1)`
@@ -1028,57 +1023,12 @@ contract PPFXTest is Test {
         vm.warp(block.timestamp + 5);
 
         uint48 signedAt = uint48(block.timestamp);
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
-        bytes memory out = createClaimData(address(this), signedAt, nonce);
+        bytes memory out = createClaimData(address(this), signedAt);
 
         vm.expectRevert(bytes("Invalid Signature"));
         // Delegate in signature is `signedAddr`, but in function call it is `address(1)`
         ppfx.claimPendingWithdrawalForUser(address(1), signerAddr, out);
-    }
-
-    function test_Fail_WithdrawForUser_MismatchNonce() public {
-        
-        // Transfer USDT from this address to address 1
-        usdt.transfer(signerAddr, 1 ether);
-
-        // Deposit to PPFX
-        vm.startPrank(signerAddr);
-        usdt.approve(address(ppfx), 1 ether);
-        ppfx.deposit(1 ether);
-        vm.stopPrank();
-
-        uint48 signedAt = uint48(block.timestamp);
-        uint256 withdrawAmount = 1 ether;
-        uint256 nonce = 123;
-
-        bytes memory out = createWithdrawData(address(this), signedAt, nonce, withdrawAmount);
-
-        vm.expectRevert(bytes("Invalid Signature"));
-        ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
-    }
-
-    function test_Fail_ClaimForUser_MismatchNonce() public {
-        
-        // Transfer USDT from this address to address 1
-        usdt.transfer(signerAddr, 1 ether);
-
-        // Deposit to PPFX
-        vm.startPrank(signerAddr);
-        usdt.approve(address(ppfx), 1 ether);
-        ppfx.deposit(1 ether);
-        ppfx.withdraw(1 ether);
-        vm.stopPrank();
-        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
-        vm.warp(block.timestamp + 5);
-
-        uint48 signedAt = uint48(block.timestamp);
-        uint256 nonce = 123;
-
-        bytes memory out = createClaimData(address(this), signedAt, nonce);
-
-        vm.expectRevert(bytes("Invalid Signature"));
-        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
     }
 
     function test_Fail_WithdrawForUser_SignedByAnotherUser() public {
@@ -1094,13 +1044,11 @@ contract PPFXTest is Test {
 
         uint48 signedAt = uint48(block.timestamp);
         uint256 withdrawAmount = 1 ether;
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
         bytes32 withdrawHash = ppfx.getWithdrawHash(
             signerAddr,
             address(this),
             withdrawAmount,
-            nonce,
             ppfx.WITHDRAW_SELECTOR(),
             signedAt
         );
@@ -1120,7 +1068,6 @@ contract PPFXTest is Test {
             signerAddr,
             address(this),
             withdrawAmount,
-            nonce,
             ppfx.WITHDRAW_SELECTOR(),
             signedAt
         );
@@ -1147,12 +1094,10 @@ contract PPFXTest is Test {
         vm.warp(block.timestamp + 5);
 
         uint48 signedAt = uint48(block.timestamp);
-        uint256 nonce = ppfx.userNonce(signerAddr);
 
         bytes32 claimHash = ppfx.getClaimHash(
             signerAddr,
             address(this),
-            nonce,
             ppfx.CLAIM_SELECTOR(),
             signedAt
         );
@@ -1171,7 +1116,6 @@ contract PPFXTest is Test {
         bytes memory data = abi.encode(
             signerAddr,
             address(this),
-            nonce,
             ppfx.CLAIM_SELECTOR(),
             signedAt
         );
@@ -1188,14 +1132,12 @@ contract PPFXTest is Test {
     function createWithdrawData(
         address delegate,
         uint48 signedAt,
-        uint256 nonce,
         uint256 withdrawAmount
     ) internal view returns (bytes memory) {
         bytes32 withdrawHash = ppfx.getWithdrawHash(
             signerAddr,
             delegate,
             withdrawAmount,
-            nonce,
             ppfx.WITHDRAW_SELECTOR(),
             signedAt
         );
@@ -1214,7 +1156,6 @@ contract PPFXTest is Test {
             signerAddr,
             delegate,
             withdrawAmount,
-            nonce,
             ppfx.WITHDRAW_SELECTOR(),
             signedAt
         );
@@ -1225,13 +1166,11 @@ contract PPFXTest is Test {
 
     function createClaimData(
         address delegate,
-        uint48 signedAt,
-        uint256 nonce
+        uint48 signedAt
     ) internal view returns (bytes memory) {
         bytes32 claimHash = ppfx.getClaimHash(
             signerAddr,
             delegate,
-            nonce,
             ppfx.CLAIM_SELECTOR(),
             signedAt
         );
@@ -1249,7 +1188,6 @@ contract PPFXTest is Test {
         bytes memory data = abi.encode(
             signerAddr,
             delegate,
-            nonce,
             ppfx.CLAIM_SELECTOR(),
             signedAt
         );

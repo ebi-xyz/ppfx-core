@@ -21,14 +21,12 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     using MessageHashUtils for bytes32;
 
     uint256 public constant VALID_DATA_OFFSET = 20;
-    uint256 public constant CLAIM_SIGNATURE_OFFSET = 180;
-    uint256 public constant WITHDRAW_SIGNATURE_OFFSET = 212;
+    uint256 public constant CLAIM_SIGNATURE_OFFSET = 148;
+    uint256 public constant WITHDRAW_SIGNATURE_OFFSET = 180;
     uint256 public constant SIG_VALID_FOR_SEC = 120;
 
     bytes4 public constant WITHDRAW_SELECTOR = bytes4(keccak256("withdrawForUser(address,address,uint256,bytes)"));
     bytes4 public constant CLAIM_SELECTOR = bytes4(keccak256("claimPendingWithdrawalForUser(address,address,bytes)"));
-
-    mapping(address => uint256) public userNonce;
 
     uint256 constant public MAX_OPERATORS = 25;
 
@@ -203,7 +201,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         userFundingBalance[user] -= amount;
         pendingWithdrawalBalance[user] += amount;
         lastWithdrawalTime[user] = block.timestamp;
-        userNonce[user] += 1;
         emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
     }
 
@@ -243,7 +240,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         usdt.safeTransfer(delegate, pendingBal);
         pendingWithdrawalBalance[user] = 0;
         lastWithdrawalTime[user] = 0;
-        userNonce[user] += 1;
         emit UserClaimedWithdrawal(user, pendingBal, block.timestamp);
     }
 
@@ -874,24 +870,22 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         address user,
         address delegate,
         uint256 amount,
-        uint256 nonce,
         bytes4 methodID,
         uint48 signedAt
     ) public view returns (bytes32) {
         return keccak256(
-            abi.encode(user, delegate, nonce, block.chainid, methodID, amount, signedAt)
+            abi.encode(user, delegate, block.chainid, methodID, amount, signedAt)
         );
     }
 
     function getClaimHash(
         address user,
         address delegate,
-        uint256 nonce,
         bytes4 methodID,
         uint48 signedAt
     ) public view returns (bytes32) {
         return keccak256(
-            abi.encode(user, delegate, nonce, block.chainid, methodID, signedAt)
+            abi.encode(user, delegate, block.chainid, methodID, signedAt)
         );
     }
 
@@ -901,7 +895,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             address user,
             address delegate,
             uint256 amount,
-            uint256 nonce,
             bytes4 methodID,
             uint48 signedAt,
             bytes calldata signature
@@ -914,9 +907,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
 
-        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getWithdrawHash(user, delegate, amount, nonce, methodID, signedAt));
-        bool valid = nonce == userNonce[user] &&
-            block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
+        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getWithdrawHash(user, delegate, amount, methodID, signedAt));
+        bool valid = block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
             methodID == WITHDRAW_SELECTOR &&
             user == ECDSA.recover(hash, signature);
 
@@ -928,7 +920,6 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             address ppfxAddr,
             address user,
             address delegate,
-            uint256 nonce,
             bytes4 methodID,
             uint48 signedAt,
             bytes calldata signature
@@ -941,9 +932,8 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
         require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
 
-        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getClaimHash(user, delegate, nonce, methodID, signedAt));
-        bool valid = nonce == userNonce[user] &&
-            block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
+        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getClaimHash(user, delegate, methodID, signedAt));
+        bool valid = block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
             methodID == CLAIM_SELECTOR && 
             user == ECDSA.recover(hash, signature);
 
@@ -958,16 +948,15 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             address user,
             address delegate,
             uint256 amount,
-            uint256 nonce,
             bytes4 methodID,
             uint48 signedAt,
             bytes calldata signature
         )
     {
         ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
-        (user, delegate, amount, nonce, methodID, signedAt) = abi.decode(
+        (user, delegate, amount, methodID, signedAt) = abi.decode(
             data[VALID_DATA_OFFSET:WITHDRAW_SIGNATURE_OFFSET],
-            (address, address, uint256, uint256, bytes4, uint48)
+            (address, address, uint256, bytes4, uint48)
         );
         signature = data[WITHDRAW_SIGNATURE_OFFSET:];
     }
@@ -979,16 +968,15 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
             address ppfxAddr,
             address user,
             address delegate,
-            uint256 nonce,
             bytes4 methodID,
             uint48 signedAt,
             bytes calldata signature
         )
     {
         ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
-        (user, delegate, nonce, methodID, signedAt) = abi.decode(
+        (user, delegate, methodID, signedAt) = abi.decode(
             data[VALID_DATA_OFFSET:CLAIM_SIGNATURE_OFFSET],
-            (address, address, uint256, bytes4, uint48)
+            (address, address, bytes4, uint48)
         );
         signature = data[CLAIM_SIGNATURE_OFFSET:];
     }
