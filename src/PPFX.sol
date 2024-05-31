@@ -21,6 +21,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     using MessageHashUtils for bytes32;
 
     uint256 public constant VALID_DATA_OFFSET = 20;
+
     uint256 public constant CLAIM_SIGNATURE_OFFSET = 148;
     uint256 public constant WITHDRAW_SIGNATURE_OFFSET = 180;
     uint256 public constant SIG_VALID_FOR_SEC = 120;

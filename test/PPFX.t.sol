@@ -958,7 +958,7 @@ contract PPFXTest is Test {
         uint256 withdrawAmount = 1 ether;
 
         bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
-
+        
         vm.expectRevert(bytes("Invalid Signature"));
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
     }
@@ -980,7 +980,7 @@ contract PPFXTest is Test {
         vm.warp(block.timestamp + ppfx.SIG_VALID_FOR_SEC() * 2);
 
         uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
-
+        
         bytes memory out = createClaimData(address(this), signedAt);
 
         vm.expectRevert(bytes("Invalid Signature"));
