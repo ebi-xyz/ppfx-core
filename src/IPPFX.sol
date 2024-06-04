@@ -43,6 +43,22 @@ interface IPPFX {
     event WithdrawalBalanceReduced(address indexed user, uint256 amount);
 
     /**
+     * @dev Delegate Data used in withdrawForUser / claimPendingWithdrawalForUser
+     * @param from signer address
+     * @param delegate address delegating to
+     * @param amount amount withdrawing, use 0 when claiming
+     * @param deadline block timestamp on when the signature shouldn't be active anymore
+     * @param signature signed getWithdrawHash() / getClaimHash()
+     */
+    struct DelegateData {
+        address from;
+        address delegate;
+        uint256 amount;
+        uint48 deadline;
+        bytes signature;
+    }
+
+    /**
      * @dev Get Sender total trading balance.
      * @return Sum of sender's trading balance across all available markets.
      */
@@ -100,16 +116,16 @@ interface IPPFX {
      * @param delegate The delegated address to initiate the withdrawal
      * @param user The target address to withdraw from
      * @param amount The amount of USDT to withdraw
-     * @param signature Signature from the user
+     * @param delegateData Delegate Data from the user
      */
-    function withdrawForUser(address delegate, address user, uint256 amount, bytes calldata signature) external;
+    function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external;
 
     /**
      * @dev Claim all pending withdrawal for target user
-     * Throw if no available pending withdrawal / invalid signature
+     * Throw if no available pending withdrawal / invalid delegate data / signature
      * @param delegate The delegated address to claim pending withdrawal
      * @param user The target address to claim pending withdrawal from
-     * @param signature Signature from the user
+     * @param delegateData Delegate Data from the user
      */
-    function claimPendingWithdrawalForUser(address delegate, address user, bytes calldata signature) external;
+    function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external;
 }

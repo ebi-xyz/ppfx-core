@@ -10,9 +10,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IPPFX} from "./IPPFX.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 
-
-contract PPFX is IPPFX, Context, ReentrancyGuard {
+contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     using Math for uint256;
@@ -20,16 +21,10 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
-    uint256 public constant VALID_DATA_OFFSET = 20;
-
-    uint256 public constant CLAIM_SIGNATURE_OFFSET = 148;
-    uint256 public constant WITHDRAW_SIGNATURE_OFFSET = 180;
-    uint256 public constant SIG_VALID_FOR_SEC = 120;
-
-    bytes4 public constant WITHDRAW_SELECTOR = bytes4(keccak256("withdrawForUser(address,address,uint256,bytes)"));
-    bytes4 public constant CLAIM_SELECTOR = bytes4(keccak256("claimPendingWithdrawalForUser(address,address,bytes)"));
-
-    uint256 constant public MAX_OPERATORS = 25;
+    string  public constant CONTRACT_VERSION = "1.1";
+    bytes32 public constant WITHDRAW_FOR_USER_TYPEHASH = keccak256("withdrawForUser(address delegate,address from,uint256 amount,uint256 nonce,uint48 deadline)");
+    bytes32 public constant CLAIM_FOR_USER_TYPEHASH = keccak256("claimPendingWithdrawalForUser(address delegate,address from,uint256 nonce,uint48 deadline)");
+    uint256 public constant MAX_OPERATORS = 25;
 
     address public treasury;
     address public admin;
@@ -82,7 +77,7 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         IERC20 usdtAddress,
         uint256 _withdrawalWaitTime,
         uint256 _minimumOrderAmount
-    ) {
+    ) EIP712("PPFXCore", CONTRACT_VERSION) {
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
@@ -189,16 +184,16 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
      * @param delegate The delegated address to initiate the withdrawal
      * @param user The target address to withdraw from
      * @param amount The amount of USDT to withdraw
-     * @param signature Signature from the user
+     * @param delegateData Delegate Data from the user
      *
      * Emits a {UserWithdrawal} event.
      *
      */
-    function withdrawForUser(address delegate, address user, uint256 amount, bytes calldata signature) external nonReentrant {
+    function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external nonReentrant {
         require(amount > 0, "Invalid amount");
         require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
-        (bool valid, address fromUser, address toUser, uint256 sigAmount) = validateWithdrawSig(signature);
-        require(valid && fromUser == user && toUser == delegate && amount == sigAmount, "Invalid Signature");
+        (bool valid, address fromUser, address toUser, uint256 sigAmount) = verifyDelegateWithdraw(delegateData);
+        require(valid && fromUser == user && toUser == delegate && amount == sigAmount, "Invalid Delegate Data");
         userFundingBalance[user] -= amount;
         pendingWithdrawalBalance[user] += amount;
         lastWithdrawalTime[user] = block.timestamp;
@@ -224,20 +219,20 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
 
     /**
      * @dev Claim all pending withdrawal for target user
-     * Throw if no available pending withdrawal / invalid signature
+     * Throw if no available pending withdrawal / invalid delegate data / signature
      * @param delegate The delegated address to claim pending withdrawal
      * @param user The target address to claim pending withdrawal from
-     * @param signature Signature from the user
+     * @param delegateData Delegate Data from the user
      *
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawalForUser(address delegate, address user, bytes calldata signature) external nonReentrant {
+    function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[user];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
         require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
-        (bool valid, address fromUser, address toUser) = validateClaimSig(signature);
-        require(valid && fromUser == user && toUser == delegate, "Invalid Signature");
+        (bool valid, address fromUser, address toUser) = verifyDelegateClaim(delegateData);
+        require(valid && fromUser == user && toUser == delegate, "Invalid Delegate Data");
         usdt.safeTransfer(delegate, pendingBal);
         pendingWithdrawalBalance[user] = 0;
         lastWithdrawalTime[user] = 0;
@@ -863,122 +858,109 @@ contract PPFX is IPPFX, Context, ReentrancyGuard {
         emit NewMinimumOrderAmount(newMinOrderAmt);
     }
     
-    /*************************************************
-     * Functions for signing & validating signatures *
-     *************************************************/
+    /*******************************************************************
+     * Functions for getting hash data to sign & validating signatures *
+     *******************************************************************/
 
     function getWithdrawHash(
         address user,
         address delegate,
         uint256 amount,
-        bytes4 methodID,
-        uint48 signedAt
+        uint48 deadline
     ) public view returns (bytes32) {
-        return keccak256(
-            abi.encode(user, delegate, block.chainid, methodID, amount, signedAt)
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    WITHDRAW_FOR_USER_TYPEHASH,
+                    delegate,
+                    user,
+                    amount,
+                    nonces(user),
+                    deadline
+                )
+            )
         );
     }
 
     function getClaimHash(
         address user,
         address delegate,
-        bytes4 methodID,
-        uint48 signedAt
+        uint48 deadline
     ) public view returns (bytes32) {
-        return keccak256(
-            abi.encode(user, delegate, block.chainid, methodID, signedAt)
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    CLAIM_FOR_USER_TYPEHASH,
+                    delegate,
+                    user,
+                    nonces(user),
+                    deadline
+                )
+            )
         );
     }
 
-    function validateWithdrawSig(bytes calldata data) public view returns (bool, address, address, uint256){
-        (
-            address ppfxAddr,
-            address user,
-            address delegate,
-            uint256 amount,
-            bytes4 methodID,
-            uint48 signedAt,
-            bytes calldata signature
-        ) = parseWithdrawData(data);
-        // solhint-disable-next-line reason-string
-        require(
-            signature.length == 64 || signature.length == 65,
-            "PPFX: invalid signature length in data"
-        );
-
-        require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
-
-        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getWithdrawHash(user, delegate, amount, methodID, signedAt));
-        bool valid = block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
-            methodID == WITHDRAW_SELECTOR &&
-            user == ECDSA.recover(hash, signature);
-
-        return (valid, user, delegate, amount);
+    function verifyDelegateWithdraw(DelegateData calldata data) public view returns (bool, address, address, uint256){
+        (address signer, address delegate, uint256 amount, bool active, bool signerMatch) = _validateDelegateWithdraw(data);
+        return (signerMatch && active, signer, delegate, amount);
     }
 
-    function validateClaimSig(bytes calldata data) public view returns (bool, address, address){
-        (
-            address ppfxAddr,
-            address user,
-            address delegate,
-            bytes4 methodID,
-            uint48 signedAt,
-            bytes calldata signature
-        ) = parseClaimData(data);
-        // solhint-disable-next-line reason-string
-        require(
-            signature.length == 64 || signature.length == 65,
-            "PPFX: invalid signature length in data"
-        );
-
-        require(ppfxAddr == address(this), "PPFX: Signature and Data address is not PPFX");
-
-        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getClaimHash(user, delegate, methodID, signedAt));
-        bool valid = block.timestamp <= signedAt + SIG_VALID_FOR_SEC && 
-            methodID == CLAIM_SELECTOR && 
-            user == ECDSA.recover(hash, signature);
-
-        return (valid, user, delegate);
+    function verifyDelegateClaim(DelegateData calldata data) public view returns (bool, address, address){
+        (address signer, address delegate, bool active, bool signerMatch) = _validateDelegateClaim(data);
+        return (signerMatch && active, signer, delegate);
     }
 
-    function parseWithdrawData(bytes calldata data) 
-        public
-        pure
-        returns (
-            address ppfxAddr,
-            address user,
-            address delegate,
-            uint256 amount,
-            bytes4 methodID,
-            uint48 signedAt,
-            bytes calldata signature
-        )
-    {
-        ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
-        (user, delegate, amount, methodID, signedAt) = abi.decode(
-            data[VALID_DATA_OFFSET:WITHDRAW_SIGNATURE_OFFSET],
-            (address, address, uint256, bytes4, uint48)
+    /***********************************************
+     * Internal Functions for validating signature *
+     ***********************************************/
+
+    function _validateDelegateWithdraw(
+        DelegateData calldata data
+    ) internal view returns (address signer, address delegate, uint256 amount, bool active, bool signerMatch) {
+        (bool isValid, address recovered) = _recoverWithdrawDelegateDataSigner(data);
+        return (
+            recovered,
+            data.delegate,
+            data.amount,
+            data.deadline >= block.timestamp,
+            isValid && recovered == data.from
         );
-        signature = data[WITHDRAW_SIGNATURE_OFFSET:];
     }
 
-    function parseClaimData(bytes calldata data) 
-        public
-        pure
-        returns (
-            address ppfxAddr,
-            address user,
-            address delegate,
-            bytes4 methodID,
-            uint48 signedAt,
-            bytes calldata signature
-        )
-    {
-        ppfxAddr = address(uint160(bytes20(data[:VALID_DATA_OFFSET])));
-        (user, delegate, methodID, signedAt) = abi.decode(
-            data[VALID_DATA_OFFSET:CLAIM_SIGNATURE_OFFSET],
-            (address, address, bytes4, uint48)
+    function _validateDelegateClaim(
+        DelegateData calldata data
+    ) internal view returns (address signer, address delegate, bool active, bool signerMatch) {
+        (bool isValid, address recovered) = _recoverClaimDelegateDataSigner(data);
+        return (
+            recovered,
+            data.delegate,
+            data.deadline >= block.timestamp,
+            isValid && recovered == data.from
         );
-        signature = data[CLAIM_SIGNATURE_OFFSET:];
+    }
+
+    function _recoverWithdrawDelegateDataSigner(
+        DelegateData calldata data
+    ) internal view virtual returns (bool, address) {
+        (address recovered, ECDSA.RecoverError err, ) = getWithdrawHash(
+            data.from,
+            data.delegate,
+            data.amount,
+            data.deadline
+        ).tryRecover(data.signature);
+
+        return (err == ECDSA.RecoverError.NoError, recovered);
+    }
+
+    function _recoverClaimDelegateDataSigner(
+        DelegateData calldata data
+    ) internal view virtual returns (bool, address) {
+        (address recovered, ECDSA.RecoverError err, ) = getClaimHash(
+            data.from,
+            data.delegate,
+            data.deadline
+        ).tryRecover(data.signature);
+
+        return (err == ECDSA.RecoverError.NoError, recovered);
     }
 }

@@ -567,7 +567,7 @@ contract PPFXTest is Test {
         uint48 signedAt = uint48(block.timestamp);
         uint256 withdrawAmount = 1 ether;
 
-        bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
+        IPPFX.DelegateData memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
 
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
         assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
@@ -589,7 +589,7 @@ contract PPFXTest is Test {
         
         uint48 signedAt = uint48(block.timestamp);
 
-        bytes memory out = createClaimData(address(this), signedAt);
+        IPPFX.DelegateData memory out = createClaimData(address(this), signedAt);
 
         uint256 usdtBalBeforeClaim = usdt.balanceOf(address(this));
 
@@ -952,14 +952,14 @@ contract PPFXTest is Test {
         ppfx.deposit(1 ether);
         vm.stopPrank();
 
-        vm.warp(block.timestamp + ppfx.SIG_VALID_FOR_SEC() * 2);
+        vm.warp(block.timestamp + 200);
         
-        uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
+        uint48 signedAt = uint48(block.timestamp-200);
         uint256 withdrawAmount = 1 ether;
 
-        bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
+        IPPFX.DelegateData memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
         
-        vm.expectRevert(bytes("Invalid Signature"));
+        vm.expectRevert(bytes("Invalid Delegate Data"));
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
     }
 
@@ -977,13 +977,13 @@ contract PPFXTest is Test {
         assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
         vm.warp(block.timestamp + 5);
 
-        vm.warp(block.timestamp + ppfx.SIG_VALID_FOR_SEC() * 2);
+        vm.warp(block.timestamp + 200);
 
-        uint48 signedAt = uint48(block.timestamp-ppfx.SIG_VALID_FOR_SEC()-1);
+        uint48 signedAt = uint48(block.timestamp-5);
         
-        bytes memory out = createClaimData(address(this), signedAt);
+        IPPFX.DelegateData memory out = createClaimData(address(this), signedAt);
 
-        vm.expectRevert(bytes("Invalid Signature"));
+        vm.expectRevert(bytes("Invalid Delegate Data"));
         ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
     }
 
@@ -1001,9 +1001,9 @@ contract PPFXTest is Test {
         uint48 signedAt = uint48(block.timestamp);
         uint256 withdrawAmount = 1 ether;
 
-        bytes memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
+        IPPFX.DelegateData memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
 
-        vm.expectRevert(bytes("Invalid Signature"));
+        vm.expectRevert(bytes("Invalid Delegate Data"));
         // Delegate in signature is `signedAddr`, but in function call it is `address(1)`
         ppfx.withdrawForUser(address(1), signerAddr, 1 ether, out);
     }
@@ -1024,9 +1024,9 @@ contract PPFXTest is Test {
 
         uint48 signedAt = uint48(block.timestamp);
 
-        bytes memory out = createClaimData(address(this), signedAt);
+        IPPFX.DelegateData memory out = createClaimData(address(this), signedAt);
 
-        vm.expectRevert(bytes("Invalid Signature"));
+        vm.expectRevert(bytes("Invalid Delegate Data"));
         // Delegate in signature is `signedAddr`, but in function call it is `address(1)`
         ppfx.claimPendingWithdrawalForUser(address(1), signerAddr, out);
     }
@@ -1042,40 +1042,23 @@ contract PPFXTest is Test {
         ppfx.deposit(1 ether);
         vm.stopPrank();
 
-        uint48 signedAt = uint48(block.timestamp);
+        uint48 deadline = uint48(block.timestamp) + 200;
         uint256 withdrawAmount = 1 ether;
 
-        bytes32 withdrawHash = ppfx.getWithdrawHash(
+        bytes32 digest = ppfx.getWithdrawHash(
             signerAddr,
             address(this),
             withdrawAmount,
-            ppfx.WITHDRAW_SELECTOR(),
-            signedAt
-        );
-
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32",
-                withdrawHash
-            )
+            deadline
         );
 
         // Supposed to be signed by `signerPrivateKey`
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes memory data = abi.encode(
-            signerAddr,
-            address(this),
-            withdrawAmount,
-            ppfx.WITHDRAW_SELECTOR(),
-            signedAt
-        );
+        IPPFX.DelegateData memory out = IPPFX.DelegateData(signerAddr, address(this), withdrawAmount, deadline, signature);
 
-        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
-        bytes memory out = abi.encodePacked(packedPpfx, data, signature);
-
-        vm.expectRevert(bytes("Invalid Signature"));
+        vm.expectRevert(bytes("Invalid Delegate Data"));
         ppfx.withdrawForUser(address(this), signerAddr, 1 ether, out);
     }
 
@@ -1093,37 +1076,21 @@ contract PPFXTest is Test {
         assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 1 ether);
         vm.warp(block.timestamp + 5);
 
-        uint48 signedAt = uint48(block.timestamp);
+        uint48 deadline = uint48(block.timestamp) + 200;
 
-        bytes32 claimHash = ppfx.getClaimHash(
+        bytes32 digest = ppfx.getClaimHash(
             signerAddr,
             address(this),
-            ppfx.CLAIM_SELECTOR(),
-            signedAt
-        );
-
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32",
-                claimHash
-            )
+            deadline
         );
 
         // Supposed to be signed by `signerPrivateKey`
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(userPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes memory data = abi.encode(
-            signerAddr,
-            address(this),
-            ppfx.CLAIM_SELECTOR(),
-            signedAt
-        );
+        IPPFX.DelegateData memory out = IPPFX.DelegateData(signerAddr, address(this), 0, deadline, signature);
 
-        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
-        bytes memory out = abi.encodePacked(packedPpfx, data, signature);
-
-        vm.expectRevert(bytes("Invalid Signature"));
+        vm.expectRevert(bytes("Invalid Delegate Data"));
         ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
     }
 
@@ -1131,68 +1098,35 @@ contract PPFXTest is Test {
 
     function createWithdrawData(
         address delegate,
-        uint48 signedAt,
+        uint48 deadline,
         uint256 withdrawAmount
-    ) internal view returns (bytes memory) {
-        bytes32 withdrawHash = ppfx.getWithdrawHash(
+    ) internal view returns (IPPFX.DelegateData memory) {
+        bytes32 digest = ppfx.getWithdrawHash(
             signerAddr,
             delegate,
             withdrawAmount,
-            ppfx.WITHDRAW_SELECTOR(),
-            signedAt
+            deadline
         );
-
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32",
-                withdrawHash
-            )
-        );
-
+        
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes memory data = abi.encode(
-            signerAddr,
-            delegate,
-            withdrawAmount,
-            ppfx.WITHDRAW_SELECTOR(),
-            signedAt
-        );
-
-        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
-        return abi.encodePacked(packedPpfx, data, signature);
+        return IPPFX.DelegateData(signerAddr, delegate, withdrawAmount, deadline, signature);
     }
 
     function createClaimData(
         address delegate,
-        uint48 signedAt
-    ) internal view returns (bytes memory) {
-        bytes32 claimHash = ppfx.getClaimHash(
+        uint48 deadline
+    ) internal view returns (IPPFX.DelegateData memory) {
+        bytes32 digest = ppfx.getClaimHash(
             signerAddr,
             delegate,
-            ppfx.CLAIM_SELECTOR(),
-            signedAt
-        );
-
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19Ethereum Signed Message:\n32",
-                claimHash
-            )
+            deadline
         );
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes memory data = abi.encode(
-            signerAddr,
-            delegate,
-            ppfx.CLAIM_SELECTOR(),
-            signedAt
-        );
-
-        bytes memory packedPpfx = abi.encodePacked(address(ppfx));
-        return abi.encodePacked(packedPpfx, data, signature);
+       return IPPFX.DelegateData(signerAddr, delegate, 0, deadline, signature);
     }
 }
