@@ -1094,6 +1094,64 @@ contract PPFXTest is Test {
         ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
     }
 
+    function test_Fail_WithdrawForUser_Reuse_signature() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+        
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 0.5 ether;
+
+        IPPFX.DelegateData memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
+
+        ppfx.withdrawForUser(address(this), signerAddr, 0.5 ether, out);
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 0.5 ether);
+
+        vm.expectRevert(bytes("Invalid Delegate Data"));
+        ppfx.withdrawForUser(address(this), signerAddr, 0.5 ether, out);
+    }
+
+    function test_Fail_ClaimForUser_Reuse_signature() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 2 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 2 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(0.5 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 0.5 ether);
+        vm.warp(block.timestamp + 5);
+        
+        uint48 signedAt = uint48(block.timestamp);
+
+        IPPFX.DelegateData memory out = createClaimData(address(this), signedAt);
+
+        uint256 usdtBalBeforeClaim = usdt.balanceOf(address(this));
+
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+
+        assertEq(ppfx.totalBalance(signerAddr), 0.5 ether);
+        assertEq(usdt.balanceOf(address(this)), usdtBalBeforeClaim + 0.5 ether);
+
+        vm.startPrank(signerAddr);
+        ppfx.withdraw(0.5 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 0.5 ether);
+        vm.warp(block.timestamp + 5);
+
+        vm.expectRevert(bytes("Invalid Delegate Data"));
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+    }
+
     // Internal function for creating the data & signature //
 
     function createWithdrawData(
