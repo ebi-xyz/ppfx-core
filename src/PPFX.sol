@@ -194,6 +194,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
         require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
         (bool valid, address fromUser, address toUser, uint256 sigAmount) = verifyDelegateWithdraw(delegateData);
         require(valid && fromUser == user && toUser == delegate && amount == sigAmount, "Invalid Delegate Data");
+        _useNonce(fromUser);
         userFundingBalance[user] -= amount;
         pendingWithdrawalBalance[user] += amount;
         lastWithdrawalTime[user] = block.timestamp;
@@ -233,6 +234,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
         require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
         (bool valid, address fromUser, address toUser) = verifyDelegateClaim(delegateData);
         require(valid && fromUser == user && toUser == delegate, "Invalid Delegate Data");
+        _useNonce(fromUser);
         usdt.safeTransfer(delegate, pendingBal);
         pendingWithdrawalBalance[user] = 0;
         lastWithdrawalTime[user] = 0;
