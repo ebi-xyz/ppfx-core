@@ -1119,6 +1119,52 @@ contract PPFXTest is Test {
         ppfx.withdrawForUser(address(this), signerAddr, 0.5 ether, out);
     }
 
+    function test_Fail_WithdrawForUser_Not_Hook() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 1 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 1 ether);
+        ppfx.deposit(1 ether);
+        vm.stopPrank();
+        
+        uint48 signedAt = uint48(block.timestamp);
+        uint256 withdrawAmount = 0.5 ether;
+
+        IPPFX.DelegateData memory out = createWithdrawData(address(this), signedAt, withdrawAmount);
+
+        vm.startPrank(address(0x12345678));
+        vm.expectRevert(bytes("Caller not withdraw hook"));
+        ppfx.withdrawForUser(address(this), signerAddr, 0.5 ether, out);
+        vm.stopPrank();
+    }
+
+    function test_Fail_ClaimForUser_Not_Hook() public {
+        
+        // Transfer USDT from this address to address 1
+        usdt.transfer(signerAddr, 2 ether);
+
+        // Deposit to PPFX
+        vm.startPrank(signerAddr);
+        usdt.approve(address(ppfx), 2 ether);
+        ppfx.deposit(1 ether);
+        ppfx.withdraw(0.5 ether);
+        vm.stopPrank();
+        assertEq(ppfx.pendingWithdrawalBalance(signerAddr), 0.5 ether);
+        vm.warp(block.timestamp + 5);
+        
+        uint48 signedAt = uint48(block.timestamp);
+
+        IPPFX.DelegateData memory out = createClaimData(address(this), signedAt);
+
+        vm.startPrank(address(0x12345678));
+        vm.expectRevert(bytes("Caller not withdraw hook"));
+        ppfx.claimPendingWithdrawalForUser(address(this), signerAddr, out);
+        vm.stopPrank();
+    }
+
     function test_Fail_ClaimForUser_Reuse_signature() public {
         
         // Transfer USDT from this address to address 1
