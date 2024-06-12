@@ -44,6 +44,8 @@ contract PPFXTest is Test {
         userPrivateKey = 0xa11ce;
         signerPrivateKey = 0xabc123;
         signerAddr = vm.addr(signerPrivateKey);
+
+        ppfx.updateWithdrawHook(address(this));
     }
 
     function test_SuccessDeposit() public {
