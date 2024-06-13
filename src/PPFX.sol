@@ -26,6 +26,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     bytes32 public constant CLAIM_FOR_USER_TYPEHASH = keccak256("claimPendingWithdrawalForUser(address delegate,address from,uint256 nonce,uint48 deadline)");
     uint256 public constant MAX_OPERATORS = 25;
 
+    address public withdrawHook;
     address public treasury;
     address public admin;
     address public insurance;
@@ -64,6 +65,14 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      */
     modifier onlyOperator {
         require(operators.contains(_msgSender()), "Caller not operator");
+        _;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the Withdraw Hook
+     */
+    modifier onlyWithdrawHook {
+        require(_msgSender() == withdrawHook, "Caller not withdraw hook");
         _;
     }
 
@@ -189,7 +198,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      * Emits a {UserWithdrawal} event.
      *
      */
-    function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external nonReentrant {
+    function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external onlyWithdrawHook nonReentrant {
         require(amount > 0, "Invalid amount");
         require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
         (bool valid, address fromUser, address toUser, uint256 sigAmount) = verifyDelegateWithdraw(delegateData);
@@ -228,7 +237,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external nonReentrant {
+    function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external onlyWithdrawHook nonReentrant {
         uint256 pendingBal = pendingWithdrawalBalance[user];
         require(pendingBal > 0, "Insufficient pending withdrawal balance");
         require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
@@ -604,6 +613,20 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
         _updateMinimumOrderAmount(newMinOrderAmt);
     }
 
+    /**
+     * @dev Update Withdraw Hook Address.
+     * @param newWithdrawHook The new withdraw hook address.
+     *
+     * Emits a {NewWithdrawHook} event.
+     *
+     * Requirements:
+     * - `newWithdrawHook` cannot be zero address.
+     */
+    function updateWithdrawHook(address newWithdrawHook) external onlyAdmin {
+        require(newWithdrawHook != address(0), "Invalid new withdraw hook address");
+        _updateWithdrawHook(newWithdrawHook);
+    }
+
     /****************************
      * Internal functions *
      ****************************/
@@ -843,6 +866,11 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     function _updateInsurance(address insuranceAddr) internal {
         insurance = insuranceAddr;
         emit NewInsurance(insuranceAddr);
+    }
+
+    function _updateWithdrawHook(address withdrawHookAddr) internal {
+        withdrawHook = withdrawHookAddr;
+        emit NewWithdrawHook(withdrawHookAddr);
     }
 
     function _updateUsdt(IERC20 newUSDT) internal {

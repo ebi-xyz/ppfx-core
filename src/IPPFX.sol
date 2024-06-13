@@ -12,6 +12,7 @@ interface IPPFX {
     event NewTreasury(address indexed newTreasuryAddress);
     event NewAdmin(address indexed newAdminAddress);
     event NewInsurance(address indexed newInsuranceAddress);
+    event NewWithdrawHook(address indexed newWithdrawHookAddress);
     event NewUSDT(address indexed newUSDTAddress);
     event NewMarketAdded(bytes32 market, string marketName);
     event NewWithdrawalWaitTime(uint256 newWaitTime);
