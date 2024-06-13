@@ -6,14 +6,15 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IPPFX} from "./IPPFX.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
+import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
+import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
+contract PPFX is IPPFX, Context, Initializable, EIP712Upgradeable, NoncesUpgradeable, ReentrancyGuardUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     using Math for uint256;
@@ -21,11 +22,11 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
-    string  public constant CONTRACT_VERSION = "1.1";
     bytes32 public constant WITHDRAW_FOR_USER_TYPEHASH = keccak256("withdrawForUser(address delegate,address from,uint256 amount,uint256 nonce,uint48 deadline)");
     bytes32 public constant CLAIM_FOR_USER_TYPEHASH = keccak256("claimPendingWithdrawalForUser(address delegate,address from,uint256 nonce,uint48 deadline)");
     uint256 public constant MAX_OPERATORS = 25;
 
+    address public withdrawHook;
     address public treasury;
     address public admin;
     address public insurance;
@@ -68,16 +69,28 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     }
 
     /**
+     * @dev Throws if called by any account other than the Withdraw Hook
+     */
+    modifier onlyWithdrawHook {
+        require(_msgSender() == withdrawHook, "Caller not withdraw hook");
+        _;
+    }
+
+    /**
      * @dev Initializes the contract with the info provided by the developer as the initial operator.
      */
-    constructor(
+    function initialize(
         address _admin, 
         address _treasury, 
         address _insurance,
         IERC20 usdtAddress,
         uint256 _withdrawalWaitTime,
-        uint256 _minimumOrderAmount
-    ) EIP712("PPFXCore", CONTRACT_VERSION) {
+        uint256 _minimumOrderAmount,
+        string memory ppfxVersion
+    ) public initializer {
+        __ReentrancyGuard_init();
+        __Nonces_init();
+        __EIP712_init("PPFXCore", ppfxVersion);
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
@@ -178,7 +191,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      * Emits a {UserWithdrawal} event.
      *
      */
-    function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external nonReentrant {
+    function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external onlyWithdrawHook nonReentrant {
         (bool valid, address fromUser, address toUser, uint256 sigAmount) = verifyDelegateWithdraw(delegateData);
         require(valid && fromUser == user && toUser == delegate && amount == sigAmount, "Invalid Delegate Data");
         _useNonce(fromUser);
@@ -206,7 +219,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      * Emits a {UserClaimedWithdrawal} event.
      *
      */
-    function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external nonReentrant {
+    function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external onlyWithdrawHook nonReentrant {
         (bool valid, address fromUser, address toUser) = verifyDelegateClaim(delegateData);
         require(valid && fromUser == user && toUser == delegate, "Invalid Delegate Data");
         _useNonce(fromUser);
@@ -576,6 +589,20 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
         _updateMinimumOrderAmount(newMinOrderAmt);
     }
 
+    /**
+     * @dev Update Withdraw Hook Address.
+     * @param newWithdrawHook The new withdraw hook address.
+     *
+     * Emits a {NewWithdrawHook} event.
+     *
+     * Requirements:
+     * - `newWithdrawHook` cannot be zero address.
+     */
+    function updateWithdrawHook(address newWithdrawHook) external onlyAdmin {
+        require(newWithdrawHook != address(0), "Invalid new withdraw hook address");
+        _updateWithdrawHook(newWithdrawHook);
+    }
+
     /****************************
      * Internal functions *
      ****************************/
@@ -841,6 +868,11 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     function _updateInsurance(address insuranceAddr) internal {
         insurance = insuranceAddr;
         emit NewInsurance(insuranceAddr);
+    }
+
+    function _updateWithdrawHook(address withdrawHookAddr) internal {
+        withdrawHook = withdrawHookAddr;
+        emit NewWithdrawHook(withdrawHookAddr);
     }
 
     function _updateUsdt(IERC20 newUSDT) internal {
