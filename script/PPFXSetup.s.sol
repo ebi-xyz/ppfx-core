@@ -34,9 +34,11 @@ contract PPFXSetupScript is Script {
             address operatorAddr = operators[i];
             if (!ppfx.isOperator(operatorAddr)) {
                 ppfx.addOperator(operatorAddr);
-                console.log("Added new operator:", operatorAddr);
+                console.log("Added new operator:");
+                console.logAddress(operatorAddr);
             } else {
-                console.log(operatorAddr, "already an operator");
+                console.logAddress(operatorAddr);
+                console.log( "already an operator");
             }
         }
         vm.stopBroadcast();   
