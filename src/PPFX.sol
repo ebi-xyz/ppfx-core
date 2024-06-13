@@ -6,14 +6,15 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IPPFX} from "./IPPFX.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
-import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
+import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
+import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
+contract PPFX is IPPFX, Context, Initializable, EIP712Upgradeable, NoncesUpgradeable, ReentrancyGuardUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     using Math for uint256;
@@ -21,7 +22,6 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
-    string  public constant CONTRACT_VERSION = "1.1";
     bytes32 public constant WITHDRAW_FOR_USER_TYPEHASH = keccak256("withdrawForUser(address delegate,address from,uint256 amount,uint256 nonce,uint48 deadline)");
     bytes32 public constant CLAIM_FOR_USER_TYPEHASH = keccak256("claimPendingWithdrawalForUser(address delegate,address from,uint256 nonce,uint48 deadline)");
     uint256 public constant MAX_OPERATORS = 25;
@@ -79,14 +79,18 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
     /**
      * @dev Initializes the contract with the info provided by the developer as the initial operator.
      */
-    constructor(
+    function initialize(
         address _admin, 
         address _treasury, 
         address _insurance,
         IERC20 usdtAddress,
         uint256 _withdrawalWaitTime,
-        uint256 _minimumOrderAmount
-    ) EIP712("PPFXCore", CONTRACT_VERSION) {
+        uint256 _minimumOrderAmount,
+        string memory ppfxVersion
+    ) public initializer {
+        __ReentrancyGuard_init();
+        __Nonces_init();
+        __EIP712_init("PPFXCore", ppfxVersion);
         _updateAdmin(_admin);
         _updateTreasury(_treasury);
         _updateInsurance(_insurance);
