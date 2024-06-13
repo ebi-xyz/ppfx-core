@@ -20,6 +20,7 @@ contract PPFXTest is Test {
     
     PPFX public ppfx;
     USDT public usdt;
+    PPFX public proxyPpfx; 
     address public treasury = address(123400);
     address public insurance = address(1234500);
 
@@ -30,13 +31,16 @@ contract PPFXTest is Test {
     function setUp() public {
         usdt = new USDT("USDT", "USDT");
         
-        ppfx = new PPFX(
+        ppfx = new PPFX();
+
+        ppfx.initialize(
             address(this),
             treasury,
             insurance,
             IERC20(address(usdt)),
             5,
-            1
+            1,
+            "test_version"
         );
 
         ppfx.addOperator(address(this));
