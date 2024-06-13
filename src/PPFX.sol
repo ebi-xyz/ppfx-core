@@ -143,10 +143,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      * Emits a {UserDeposit} event.
      */
     function deposit(uint256 amount) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-        usdt.safeTransferFrom(_msgSender(), address(this), amount);
-        userFundingBalance[_msgSender()] += amount;
-        emit UserDeposit(_msgSender(), amount);
+       _deposit(_msgSender(), _msgSender(), amount);
     }
 
     /**
@@ -157,10 +154,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      * Emits a {UserDeposit} event.
      */
     function depositForUser(address user, uint256 amount) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-        usdt.safeTransferFrom(_msgSender(), address(this), amount);
-        userFundingBalance[user] += amount;
-        emit UserDeposit(user, amount);
+        _deposit(_msgSender(), user, amount);
     }
 
     /**
@@ -171,12 +165,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      *
      */
     function withdraw(uint256 amount) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-        require(userFundingBalance[_msgSender()] >= amount, "Insufficient balance from funding account");
-        userFundingBalance[_msgSender()] -= amount;
-        pendingWithdrawalBalance[_msgSender()] += amount;
-        lastWithdrawalTime[_msgSender()] = block.timestamp;
-        emit UserWithdrawal(_msgSender(), amount, block.timestamp + withdrawalWaitTime);
+        _withdraw(_msgSender(), amount);
     }
 
     /**
@@ -190,15 +179,10 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      *
      */
     function withdrawForUser(address delegate, address user, uint256 amount, DelegateData calldata delegateData) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-        require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
         (bool valid, address fromUser, address toUser, uint256 sigAmount) = verifyDelegateWithdraw(delegateData);
         require(valid && fromUser == user && toUser == delegate && amount == sigAmount, "Invalid Delegate Data");
         _useNonce(fromUser);
-        userFundingBalance[user] -= amount;
-        pendingWithdrawalBalance[user] += amount;
-        lastWithdrawalTime[user] = block.timestamp;
-        emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
+        _withdraw(fromUser, amount);
     }
 
     /**
@@ -209,13 +193,7 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      *
      */
     function claimPendingWithdrawal() external nonReentrant {
-        uint256 pendingBal = pendingWithdrawalBalance[_msgSender()];
-        require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.timestamp >= lastWithdrawalTime[_msgSender()] + withdrawalWaitTime, "No available pending withdrawal to claim");
-        usdt.safeTransfer(_msgSender(), pendingBal);
-        pendingWithdrawalBalance[_msgSender()] = 0;
-        lastWithdrawalTime[_msgSender()] = 0;
-        emit UserClaimedWithdrawal(_msgSender(), pendingBal, block.timestamp);
+        _claimPendingWithdrawal(_msgSender(), _msgSender());
     }
 
     /**
@@ -229,16 +207,10 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
      *
      */
     function claimPendingWithdrawalForUser(address delegate, address user, DelegateData calldata delegateData) external nonReentrant {
-        uint256 pendingBal = pendingWithdrawalBalance[user];
-        require(pendingBal > 0, "Insufficient pending withdrawal balance");
-        require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
         (bool valid, address fromUser, address toUser) = verifyDelegateClaim(delegateData);
         require(valid && fromUser == user && toUser == delegate, "Invalid Delegate Data");
         _useNonce(fromUser);
-        usdt.safeTransfer(delegate, pendingBal);
-        pendingWithdrawalBalance[user] = 0;
-        lastWithdrawalTime[user] = 0;
-        emit UserClaimedWithdrawal(user, pendingBal, block.timestamp);
+        _claimPendingWithdrawal(fromUser, delegate);
     }
 
     /****************************
@@ -661,6 +633,32 @@ contract PPFX is IPPFX, EIP712, Nonces, Context, ReentrancyGuard {
                 emit WithdrawalBalanceReduced(user, pendingBal);
             }
         }
+    }
+
+    function _deposit(address user, address recipient, uint256 amount) internal {
+        require(amount > 0, "Invalid amount");
+        usdt.safeTransferFrom(user, address(this), amount);
+        userFundingBalance[recipient] += amount;
+        emit UserDeposit(recipient, amount);
+    }
+
+    function _withdraw(address user, uint256 amount) internal {
+        require(amount > 0, "Invalid amount");
+        require(userFundingBalance[user] >= amount, "Insufficient balance from funding account");
+        userFundingBalance[user] -= amount;
+        pendingWithdrawalBalance[user] += amount;
+        lastWithdrawalTime[user] = block.timestamp;
+        emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
+    }
+
+    function _claimPendingWithdrawal(address user, address recipient) internal {
+        uint256 pendingBal = pendingWithdrawalBalance[user];
+        require(pendingBal > 0, "Insufficient pending withdrawal balance");
+        require(block.timestamp >= lastWithdrawalTime[user] + withdrawalWaitTime, "No available pending withdrawal to claim");
+        usdt.safeTransfer(recipient, pendingBal);
+        pendingWithdrawalBalance[user] = 0;
+        lastWithdrawalTime[user] = 0;
+        emit UserClaimedWithdrawal(user, recipient, pendingBal, block.timestamp);
     }
 
     function _addUserTradingBalance(address user, bytes32 market, uint256 amount) internal {
