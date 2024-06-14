@@ -8,7 +8,7 @@ ACCOUNT=$1
 
 ### Load Config ###
 DEPLOY_CONFIG=$(cat config/deployConfig.json | jq)
-TESTNET=$(echo "$DEPLOY_CONFIG" | jq -r '.IsMainnet')
+TESTNET=$(echo "$DEPLOY_CONFIG" | jq -r '.IsTestnet')
 EBI_TESTNET_RPC=$(echo "$DEPLOY_CONFIG" | jq -r '.EbiTestnetRPC')
 EBI_MAINNET_RPC=$(echo "$DEPLOY_CONFIG" | jq -r '.EbiMainnetRPC')
 EBI_MAINNET_VERIFY_URL="https://explorer.ebi.xyz/api\?",

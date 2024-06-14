@@ -1,5 +1,5 @@
 {
-  "IsMainnet": true,
+  "IsTestnet": true,
   "EbiMainnetRPC": "https://rpc.ebi.xyz",
   "EbiTestnetRPC": "https://rpc.figarolabs.dev"
 }
