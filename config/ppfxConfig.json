@@ -1,0 +1,9 @@
+{
+  "admin": "0x7C44e3ab48a8b7b5779BE7fFB06Fec0eB6a41faE",
+  "insurance": "0x47f13b4aC91A0a4991501435f1FAe0Cc3FD5A21B",
+  "treasury": "0x91EdEa34a45755F8e4A6341A9c19242cE0e72daF",
+  "usdt": "0x5489DDAb89609580835eE6d655CD9B3503E7F97D",
+
+  "minOrderAmount": 10000,
+  "withdrawWaitTime": 900
+}
