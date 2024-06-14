@@ -8,35 +8,55 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {Upgrades, Options} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract PPFXProxyUpgradeScript is Script {
-    struct UpgradeConfig {
+    struct PPFXStrConfig {
         string ppfxFileName;
-        string newPpfxFileName;
+        string newPPFXFileName;
+        string ppfxVersion;
+        string[] markets;
+        address[] operators;
+    }
+
+    struct PPFXUpgradeConfig {
         address ppfx;
     }
 
-    PPFXConfig config;
+    PPFXUpgradeConfig config;
+    PPFXStrConfig strConfig;
 
     function setUp() public {
         string memory root = vm.projectRoot();
-        string memory path = string.concat(root, "/config/ppfxConfig.json");
+        string memory path = string.concat(root, "/config/ppfxUpgradeConfig.json");
         string memory json = vm.readFile(path);
         bytes memory data = vm.parseJson(json);
-        config = abi.decode(data, (PPFXConfig));
+        config = abi.decode(data, (PPFXUpgradeConfig));
+
+        string memory strPath = string.concat(root, "/config/ppfxStrConfig.json");
+        string memory strJson = vm.readFile(strPath);
+
+        string memory ppfxFileName = vm.parseJsonString(strJson, ".ppfxFileName");
+        string memory newPPFXFileName = vm.parseJsonString(strJson, ".newPPFXFileName");
+        string memory version = vm.parseJsonString(strJson, ".ppfxVersion");
+        string[] memory markets = vm.parseJsonStringArray(strJson, ".markets");
+        address[] memory operators = vm.parseJsonAddressArray(strJson, ".operators");
+        strConfig = PPFXStrConfig(
+            ppfxFileName,
+            newPPFXFileName,
+            version,
+            markets,
+            operators
+        );
     }
 
     function run() public {
-        require(config.ppfx != address(0), "PPFXDeployment: PPFX address can not be null");
-        require(bytes(config.ppfxFileName).length > 0, "PPFXDeployment: PPFX File Name can not be empty");
-        require(bytes(config.newPpfxFileName).length > 0, "PPFXDeployment: New PPFX File Name can not be empty");
         vm.startBroadcast();
 
         Options memory opts;
         opts.unsafeAllow = "delegatecall";
-        opts.referenceContract = config.ppfxFileName;
+        opts.referenceContract = strConfig.ppfxFileName;
 
         Upgrades.upgradeProxy(
             config.ppfx,
-            config.newPpfxFileName,
+            strConfig.newPPFXFileName,
             "",
             opts
         );
