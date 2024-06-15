@@ -8,42 +8,27 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {Upgrades, Options} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract PPFXProxyUpgradeScript is Script {
-    struct PPFXStrConfig {
+    struct PPFXConfig {
+        address ppfx;
         string ppfxFileName;
         string newPPFXFileName;
-        string ppfxVersion;
-        string[] markets;
-        address[] operators;
     }
 
-    struct PPFXUpgradeConfig {
-        address ppfx;
-    }
-
-    PPFXUpgradeConfig config;
-    PPFXStrConfig strConfig;
+    PPFXConfig config;
 
     function setUp() public {
         string memory root = vm.projectRoot();
-        string memory path = string.concat(root, "/config/ppfxUpgradeConfig.json");
+        string memory path = string.concat(root, "/config/ppfxConfig.json");
         string memory json = vm.readFile(path);
-        bytes memory data = vm.parseJson(json);
-        config = abi.decode(data, (PPFXUpgradeConfig));
 
-        string memory strPath = string.concat(root, "/config/ppfxStrConfig.json");
-        string memory strJson = vm.readFile(strPath);
+        address ppfx = vm.parseJsonAddress(json, ".ppfx");
+        string memory ppfxFileName = vm.parseJsonString(json, ".ppfxFileName");
+        string memory newPPFXFileName = vm.parseJsonString(json, ".newPPFXFileName");
 
-        string memory ppfxFileName = vm.parseJsonString(strJson, ".ppfxFileName");
-        string memory newPPFXFileName = vm.parseJsonString(strJson, ".newPPFXFileName");
-        string memory version = vm.parseJsonString(strJson, ".ppfxVersion");
-        string[] memory markets = vm.parseJsonStringArray(strJson, ".markets");
-        address[] memory operators = vm.parseJsonAddressArray(strJson, ".operators");
-        strConfig = PPFXStrConfig(
+        config = PPFXConfig(
+            ppfx,
             ppfxFileName,
-            newPPFXFileName,
-            version,
-            markets,
-            operators
+            newPPFXFileName
         );
     }
 
@@ -52,11 +37,11 @@ contract PPFXProxyUpgradeScript is Script {
 
         Options memory opts;
         opts.unsafeAllow = "delegatecall";
-        opts.referenceContract = strConfig.ppfxFileName;
+        opts.referenceContract = config.ppfxFileName;
 
         Upgrades.upgradeProxy(
             config.ppfx,
-            strConfig.newPPFXFileName,
+            config.newPPFXFileName,
             "",
             opts
         );

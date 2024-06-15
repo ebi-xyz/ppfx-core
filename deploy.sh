@@ -18,7 +18,6 @@ RPC=$(if [ "$TESTNET" = true ]; then echo "$EBI_TESTNET_RPC"; else echo "$EBI_MA
 VERIFY_URL=$(if [ "$TESTNET" = true ]; then echo "$EBI_TESTNET_VERIFY_URL"; else echo "$EBI_MAINNET_VERIFY_URL"; fi)
 
 CONFIG=$(cat config/ppfxConfig.json | jq)
-STR_CONFIG=$(cat config/ppfxStrConfig.json | jq)
 
 ADMIN=$(echo "$CONFIG" | jq -r '.admin')
 INSURANCE=$(echo "$CONFIG" | jq -r '.insurance')
@@ -26,7 +25,7 @@ TREASURY=$(echo "$CONFIG" | jq -r '.treasury')
 USDT=$(echo "$CONFIG" | jq -r '.usdt')
 MIN_ORDER_AMT=$(echo "$CONFIG" | jq -r '.minOrderAmount')
 WITHDRAW_WAIT_TIME=$(echo "$CONFIG" | jq -r '.withdrawWaitTime')
-PPFX_VERSION=$(echo "$STR_CONFIG" | jq -r '.ppfxVersion')
+PPFX_VERSION=$(echo "$CONFIG" | jq -r '.ppfxVersion')
 
 echo "Deploy configs: "
 echo "    Testnet=$TESTNET"

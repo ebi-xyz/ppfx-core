@@ -18,42 +18,53 @@ contract PPFXProxyDeploymentScript is Script {
 
         uint256 minOrderAmount;
         uint256 withdrawWaitTime;
-    }
 
-    struct PPFXStrConfig {
         string ppfxFileName;
-        string newPPFXFileName;
         string ppfxVersion;
         string[] markets;
         address[] operators;
     }
 
     PPFXConfig config;
-    PPFXStrConfig strConfig;
 
     function setUp() public {
         string memory root = vm.projectRoot();
         string memory path = string.concat(root, "/config/ppfxConfig.json");
         string memory json = vm.readFile(path);
-        bytes memory data = vm.parseJson(json);
 
-        config = abi.decode(data, (PPFXConfig));
+        string memory ppfxFileName = vm.parseJsonString(json, ".ppfxFileName");
+        string memory version = vm.parseJsonString(json, ".ppfxVersion");
+        string[] memory markets = vm.parseJsonStringArray(json, ".markets");
+        address[] memory operators = vm.parseJsonAddressArray(json, ".operators");
 
-        string memory strPath = string.concat(root, "/config/ppfxStrConfig.json");
-        string memory strJson = vm.readFile(strPath);
+        address admin = vm.parseJsonAddress(json, ".admin");
+        address insurance = vm.parseJsonAddress(json, ".insurance");
+        address treasury = vm.parseJsonAddress(json, ".treasury");
+        address usdt = vm.parseJsonAddress(json, ".usdt");
 
-        string memory ppfxFileName = vm.parseJsonString(strJson, ".ppfxFileName");
-        string memory newPPFXFileName = vm.parseJsonString(strJson, ".newPPFXFileName");
-        string memory version = vm.parseJsonString(strJson, ".ppfxVersion");
-        string[] memory markets = vm.parseJsonStringArray(strJson, ".markets");
-        address[] memory operators = vm.parseJsonAddressArray(strJson, ".operators");
-        strConfig = PPFXStrConfig(
+        uint256 minOrderAmount = vm.parseJsonUint(json, ".minOrderAmount");
+        uint256 withdrawWaitTime = vm.parseJsonUint(json, ".withdrawWaitTime");
+       
+        config = PPFXConfig(
+            admin,
+            insurance,
+            treasury,
+            usdt,
+            minOrderAmount,
+            withdrawWaitTime,
             ppfxFileName,
-            newPPFXFileName,
             version,
             markets,
             operators
         );
+
+        console.log("setup() loaded config:");
+        console.log("Admin: %o", admin);
+        console.log("Insurance: %o", insurance);
+        console.log("Treasury: %o", treasury);
+        console.log("USDT: %o", usdt);
+        console.log("Min Order Amount: %d", minOrderAmount);
+        console.log("Withdraw wait time: %d", withdrawWaitTime);
     }
 
     function run() public {
@@ -63,8 +74,8 @@ contract PPFXProxyDeploymentScript is Script {
         require(config.usdt != address(0), "PPFXDeployment: USDT address can not be null");
         require(config.minOrderAmount > 0, "PPFXDeployment: MinOrderAmount can not be zero");
         require(config.withdrawWaitTime > 0, "PPFXDeployment: WithdrawWaitTime can not be zero");
-        require(bytes(strConfig.ppfxVersion).length > 0, "PPFXDeployment: PPFX Version can not be empty");
-        require(bytes(strConfig.ppfxFileName).length > 0, "PPFXDeployment: PPFX File Name can not be empty");
+        require(bytes(config.ppfxVersion).length > 0, "PPFXDeployment: PPFX Version can not be empty");
+        require(bytes(config.ppfxFileName).length > 0, "PPFXDeployment: PPFX File Name can not be empty");
 
         vm.startBroadcast();
 
@@ -72,7 +83,7 @@ contract PPFXProxyDeploymentScript is Script {
         opts.unsafeAllow = "delegatecall";
 
         address proxyAddr = Upgrades.deployTransparentProxy(
-            strConfig.ppfxFileName,
+            config.ppfxFileName,
             config.admin,
             abi.encodeCall(PPFX.initialize, (
                 config.admin,
@@ -81,18 +92,18 @@ contract PPFXProxyDeploymentScript is Script {
                 IERC20(config.usdt),
                 config.withdrawWaitTime,
                 config.minOrderAmount,
-                strConfig.ppfxVersion
+                config.ppfxVersion
             )),
             opts
         );
 
         PPFX deployedPPFX = PPFX(proxyAddr);
-        uint marketLen = strConfig.markets.length;
+        uint marketLen = config.markets.length;
         
         if (marketLen > 0) {
             console.log("Start adding markets to deployed PPFX...");
             for(uint i = 0; i < marketLen; i++) {
-                string memory marketName = strConfig.markets[i];
+                string memory marketName = config.markets[i];
                 if (!deployedPPFX.marketExists(keccak256(bytes(marketName)))) {
                     deployedPPFX.addMarket(marketName);
                     console.log("Added Market:", marketName);
@@ -104,12 +115,12 @@ contract PPFXProxyDeploymentScript is Script {
             console.log("No Markets found in config");
         }
         
-        uint operatorLen = strConfig.operators.length;
+        uint operatorLen = config.operators.length;
 
         if (operatorLen > 0) {
             console.log("Start adding operators to deployed PPFX...");
             for(uint i = 0; i < operatorLen; i++) {
-                address operatorAddr = strConfig.operators[i];
+                address operatorAddr = config.operators[i];
                 if (!deployedPPFX.isOperator(operatorAddr)) {
                     deployedPPFX.addOperator(operatorAddr);
                     console.log("Added new operator:");
