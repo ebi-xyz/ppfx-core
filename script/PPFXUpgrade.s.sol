@@ -8,18 +8,40 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {Upgrades, Options} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract PPFXProxyUpgradeScript is Script {
-    function setUp() public {}
+    struct PPFXConfig {
+        address ppfx;
+        string ppfxFileName;
+        string newPPFXFileName;
+    }
+
+    PPFXConfig config;
+
+    function setUp() public {
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/config/ppfxConfig.json");
+        string memory json = vm.readFile(path);
+
+        address ppfx = vm.parseJsonAddress(json, ".ppfx");
+        string memory ppfxFileName = vm.parseJsonString(json, ".ppfxFileName");
+        string memory newPPFXFileName = vm.parseJsonString(json, ".newPPFXFileName");
+
+        config = PPFXConfig(
+            ppfx,
+            ppfxFileName,
+            newPPFXFileName
+        );
+    }
 
     function run() public {
         vm.startBroadcast();
 
         Options memory opts;
         opts.unsafeAllow = "delegatecall";
-        opts.referenceContract = "PPFX.sol";
+        opts.referenceContract = config.ppfxFileName;
 
         Upgrades.upgradeProxy(
-            vm.envAddress("PPFX"),
-            "PPFX_Upgraded.sol",
+            config.ppfx,
+            config.newPPFXFileName,
             "",
             opts
         );

@@ -6,23 +6,25 @@ source .env
 COMMIT=$(git rev-parse HEAD)
 echo "Upgrading contract with commit:\n    $COMMIT"
 
-TESTNET=$1
-ACCOUNT=$2
+DEPLOY_CONFIG=$(cat config/deployConfig.json | jq)
+TESTNET=$(echo "$DEPLOY_CONFIG" | jq -r '.IsTestnet')
 
-EBI_MAINNET_VERIFY_URL="https://explorer.ebi.xyz/api\?"
+ACCOUNT=$1
+
+EBI_TESTNET_RPC=$(echo "$DEPLOY_CONFIG" | jq -r '.EbiTestnetRPC')
+EBI_MAINNET_RPC=$(echo "$DEPLOY_CONFIG" | jq -r '.EbiMainnetRPC')
+EBI_MAINNET_VERIFY_URL="https://explorer.ebi.xyz/api\?",
 EBI_TESTNET_VERIFY_URL="https://explorer.figarolabs.dev/api\?"
 
 RPC=$(if [ "$TESTNET" = true ]; then echo "$EBI_TESTNET_RPC"; else echo "$EBI_MAINNET_RPC"; fi)
 VERIFY_URL=$(if [ "$TESTNET" = true ]; then echo "$EBI_TESTNET_VERIFY_URL"; else echo "$EBI_MAINNET_VERIFY_URL"; fi)
 
+PPFX=$(cat config/ppfxUpgradeConfig.json | jq -r '.ppfx')
+
 echo "Deploy configs: "
 echo "    Testnet=$TESTNET"
 echo "    RPC=$RPC"
 echo "    PPFX=$PPFX"
-
-echo "PPFX configs: "
-echo "    ADMIN=$ADMIN\n    INSURANCE=$INSURANCE\n    TREASURY=$TREASURY\n    USDT=$USDT"
-echo "    MIN_ORDER_AMT=$MIN_ORDER_AMT\n    WITHDRAW_WAIT_TIME=$WITHDRAW_WAIT_TIME"
 echo "Upgrading PPFX...."
 
 
