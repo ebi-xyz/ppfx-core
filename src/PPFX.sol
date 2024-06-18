@@ -675,7 +675,7 @@ contract PPFX is IPPFX, Context, Initializable, EIP712Upgradeable, NoncesUpgrade
         userFundingBalance[user] -= amount;
         pendingWithdrawalBalance[user] += amount;
         lastWithdrawalTime[user] = block.timestamp;
-        emit UserWithdrawal(user, amount, block.timestamp + withdrawalWaitTime);
+        emit UserWithdrawal(user, amount, block.timestamp);
     }
 
     function _claimPendingWithdrawal(address user, address recipient) internal {
