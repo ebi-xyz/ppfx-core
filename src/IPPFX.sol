@@ -12,6 +12,7 @@ interface IPPFX {
     event NewTreasury(address indexed newTreasuryAddress);
     event NewAdmin(address indexed newAdminAddress);
     event NewInsurance(address indexed newInsuranceAddress);
+    event NewWithdrawHook(address indexed newWithdrawHookAddress);
     event NewUSDT(address indexed newUSDTAddress);
     event NewMarketAdded(bytes32 market, string marketName);
     event NewWithdrawalWaitTime(uint256 newWaitTime);
@@ -19,12 +20,11 @@ interface IPPFX {
     event TransferAdmin(address indexed newAdminAddress);
 
     event UserDeposit(address indexed user, uint256 amount);
-    event UserWithdrawal(address indexed user, uint256 amount, uint256 availableAt);
-    event UserClaimedWithdrawal(address indexed user, uint256 amount, uint256 claimedAt);
+    event UserWithdrawal(address indexed user, uint256 amount, uint256 withdrawAt);
+    event UserClaimedWithdrawal(address indexed user, address recipient, uint256 amount, uint256 claimedAt);
 
     event PositionAdded(address indexed user, string market, uint256 size, uint256 fee);
     event PositionReduced(address indexed user, string market, uint256 size, uint256 fee);
-    event PositionClosed(address indexed user, string market, uint256 size, uint256 fee);
 
     event OrderFilled(address indexed user, string market, uint256 fee);
 

@@ -1,26 +1,48 @@
 #!/bin/zsh
-
-# configs
-RPC=https://rpc.ebi.xyz
-ADMIN=0x7C44e3ab48a8b7b5779BE7fFB06Fec0eB6a41faE
-INSURANCE=0x1fA3f3F219ce4C6d8E97d081aDaDBd33899A24Fe
-TREASURY=0x16b68c1F569Ffc6D594c43CEFf7dF1116005Bfe4
-USDT=0x5489DDAb89609580835eE6d655CD9B3503E7F97D
-
-# min order $0.1
-MIN_ORDER_AMT=10000
-
-# withdraw 15mins
-WITHDRAW_WAIT_TIME=900
+HEX_REGEX='^[0-9a-fA-F]+$'
 
 COMMIT=$(git rev-parse HEAD)
-echo "deploying contract with commit:\n    $COMMIT"
+echo "Deploying PPFX with commit:\n    $COMMIT"
+
+ACCOUNT=$1
+
+### Load Config ###
+DEPLOY_CONFIG=$(cat config/deployConfig.json | jq)
+TESTNET=$(echo "$DEPLOY_CONFIG" | jq -r '.IsTestnet')
+EBI_TESTNET_RPC=$(echo "$DEPLOY_CONFIG" | jq -r '.EbiTestnetRPC')
+EBI_MAINNET_RPC=$(echo "$DEPLOY_CONFIG" | jq -r '.EbiMainnetRPC')
+EBI_MAINNET_VERIFY_URL="https://explorer.ebi.xyz/api\?",
+EBI_TESTNET_VERIFY_URL="https://explorer.figarolabs.dev/api\?"
+
+RPC=$(if [ "$TESTNET" = true ]; then echo "$EBI_TESTNET_RPC"; else echo "$EBI_MAINNET_RPC"; fi)
+VERIFY_URL=$(if [ "$TESTNET" = true ]; then echo "$EBI_TESTNET_VERIFY_URL"; else echo "$EBI_MAINNET_VERIFY_URL"; fi)
+
+CONFIG=$(cat config/ppfxConfig.json | jq)
+
+ADMIN=$(echo "$CONFIG" | jq -r '.admin')
+INSURANCE=$(echo "$CONFIG" | jq -r '.insurance')
+TREASURY=$(echo "$CONFIG" | jq -r '.treasury')
+USDT=$(echo "$CONFIG" | jq -r '.usdt')
+MIN_ORDER_AMT=$(echo "$CONFIG" | jq -r '.minOrderAmount')
+WITHDRAW_WAIT_TIME=$(echo "$CONFIG" | jq -r '.withdrawWaitTime')
+PPFX_VERSION=$(echo "$CONFIG" | jq -r '.ppfxVersion')
+
+echo "Deploy configs: "
+echo "    Testnet=$TESTNET"
+echo "    RPC=$RPC"
 
 echo "PPFX configs: "
+echo "    PPFX Version=$PPFX_VERSION"
 echo "    ADMIN=$ADMIN\n    INSURANCE=$INSURANCE\n    TREASURY=$TREASURY\n    USDT=$USDT"
 echo "    MIN_ORDER_AMT=$MIN_ORDER_AMT\n    WITHDRAW_WAIT_TIME=$WITHDRAW_WAIT_TIME"
 echo "creating PPFX...."
 
-forge create src/PPFX.sol:PPFX --constructor-args "$ADMIN" "$TREASURY" "$INSURANCE" "$USDT" "$WITHDRAW_WAIT_TIME" "$MIN_ORDER_AMT"  --rpc-url $RPC --account deployer
 
+if [[ $ACCOUNT =~ $HEX_REGEX ]]; then
+    echo "Using Private key to deploy"
+    forge clean && forge script script/PPFXProxyDeployment.s.sol:PPFXProxyDeploymentScript --broadcast --verify --verifier blockscout --verifier-url $VERIFY_URL --rpc-url $RPC --private-key $ACCOUNT --gas-estimate-multiplier 2000 --optimize --optimizer-runs 200
+else    
+    echo "Using Account: $ACCOUNT to deploy"
+    forge clean && forge script script/PPFXProxyDeployment.s.sol:PPFXProxyDeploymentScript --broadcast --verify --verifier blockscout --verifier-url $VERIFY_URL --rpc-url $RPC --account $ACCOUNT --gas-estimate-multiplier 2000 --optimize --optimizer-runs 200
+fi
 
