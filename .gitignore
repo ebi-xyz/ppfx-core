@@ -18,3 +18,5 @@ zkout/
 broadcast/
 
 .DS_Store
+.devenv
+*.*.s??
